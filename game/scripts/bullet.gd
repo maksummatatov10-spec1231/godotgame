@@ -55,8 +55,12 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	global_position += dir * speed * delta
 	life -= delta
-	if life <= 0.0 or not GameState.ARENA_RECT.grow(40).has_point(global_position):
+	if life <= 0.0 or not GameState.map_rect.grow(40).has_point(global_position):
 		_fizzle()
+		return
+	# столкновение со стеной карты
+	if not GameState.is_walkable(global_position):
+		_fizzle(true)
 		return
 	if hostile:
 		_check_player()

@@ -1,0 +1,84 @@
+extends TileMapLayer
+## Арена на TileMapLayer. Свобода редактирования:
+## - Рисуй карту в редакторе прямо в этой сцене (см. TUTORIAL_MAP.md).
+## - Если клеток нет вообще — нарисуем арену по умолчанию сами (кольцо стен).
+## - Строки тайлсета-стены: 0 (верх стены), 4 (лицо стены), 5 (низ стены), 7 (декор стен).
+##   Всё остальное считается проходимым полом.
+
+const TS := 16
+# atlas-строки, считающиеся СТЕНАМИ (непроходимыми) — см. tutorial
+const WALL_ROWS := [0, 4, 5, 7]
+@export var default_paint := true  # сними галку, если рисуешь карту полностью сам
+
+func _ready() -> void:
+	GameState.arena = self
+	GameState.map_rect = _map_rect()
+	if default_paint and get_used_rect().size == Vector2i.ZERO:
+		_paint_default()
+	GameState.play_rect = _play_rect()
+
+func is_walkable(world_pos: Vector2) -> bool:
+	var cell := local_to_map(to_local(world_pos))
+	var ac := get_cell_atlas_coords(cell)
+	if ac == Vector2i(-1, -1):
+		return false  # пустота за пределами рисованной карты — непроходима
+	return not WALL_ROWS.has(ac.y)
+
+func _map_rect() -> Rect2:
+	var u := get_used_rect()
+	if u.size == Vector2i.ZERO:
+		return Rect2(32, 48, 960, 512)
+	return Rect2(Vector2(u.position) * TS, Vector2(u.size) * TS)
+
+func _play_rect() -> Rect2:
+	# играбельная зона = карта минус 2 тайла стен по краю
+	var u := get_used_rect()
+	if u.size == Vector2i.ZERO:
+		push_warning("Карта пуста и default_paint выключен — использую стандартные границы")
+		return Rect2(50, 66, 924, 448)
+	return Rect2(
+		Vector2(u.position) * TS + Vector2(TS * 2, TS * 2),
+		Vector2(u.size) * TS - Vector2(TS * 4, TS * 4))
+
+# ---------- АРЕНА ПО УМОЛЧАНИЮ (64x36, кольцо стен) ----------
+
+func _paint_default() -> void:
+	seed(11)
+	var floor_pool: Array = []
+	for r in [1, 2, 3]:
+		for c in range(1, 5):
+			floor_pool.append(Vector2i(c, r))
+	var cap: Array = []
+	for c in range(1, 6):
+		cap.append(Vector2i(c, 0))
+	var face: Array = []
+	for c in range(0, 6):
+		face.append(Vector2i(c, 4))
+	var shad: Array = []
+	for c in range(0, 3):
+		shad.append(Vector2i(c, 5))
+	var w_size := 64
+	var h_size := 36
+	# пол (внешние 2 кольца клеток НЕ красим — остаются пустыми = непроходимая пустота)
+	for ty in range(2, h_size - 2):
+		for tx in range(2, w_size - 2):
+			set_cell(Vector2i(tx, ty), 0, floor_pool[randi() % floor_pool.size()])
+	# верхняя стена: cap + face по порядку
+	for tx in range(w_size):
+		set_cell(Vector2i(tx, 2), 0, cap[tx % cap.size()])
+		set_cell(Vector2i(tx, 3), 0, face[tx % face.size()])
+	# нижняя стена: face + shad
+	for tx in range(w_size):
+		set_cell(Vector2i(tx, h_size - 4), 0, face[tx % face.size()])
+		set_cell(Vector2i(tx, h_size - 3), 0, shad[tx % shad.size()])
+	# боковые стены
+	for ty in range(4, h_size - 4):
+		set_cell(Vector2i(2, ty), 0, face[ty % face.size()])
+		set_cell(Vector2i(w_size - 3, ty), 0, face[ty % face.size()])
+	# декор стен: знамя, черепа, лестницы
+	for kv in [[9, Vector2i(2, 7)], [22, Vector2i(3, 7)], [41, Vector2i(4, 7)], [54, Vector2i(2, 7)]]:
+		set_cell(Vector2i(kv[0], 3), 0, kv[1])
+	for tx in [14, 49]:
+		set_cell(Vector2i(tx, 3), 0, Vector2i(9, 3))
+	# дверь внизу по центру
+	set_cell(Vector2i(w_size / 2, h_size - 3), 0, Vector2i(8, 3))

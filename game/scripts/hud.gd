@@ -181,7 +181,7 @@ func _process(delta: float) -> void:
 		xp_fill.size = Vector2(int(458.0 * float(player.xp) / float(player.xp_next)), 3)
 		level_label.text = "LV %d" % player.level
 		var t := int(GameState.run_time)
-		timer_label.text = "%02d:%02d" % [t / 60, t % 60]
+		timer_label.text = "%02d:%02d" % [floori(t / 60.0), t % 60]
 		kills_label.text = "☠ %d" % GameState.kills
 	if GameState.current_boss and is_instance_valid(GameState.current_boss):
 		boss_bar.visible = true
@@ -229,7 +229,7 @@ func show_game_over() -> void:
 	rank.scale = Vector2.ONE * 0.75
 	gameover_panel.add_child(rank)
 	var t := int(GameState.run_time)
-	var stats := _mk_label("Время: %02d:%02d   Убийств: %d   Уровень: %d" % [t / 60, t % 60, GameState.kills, player.level], Vector2(0, 175), 11, Color(0.95, 0.9, 0.9), HORIZONTAL_ALIGNMENT_CENTER)
+	var stats := _mk_label("Время: %02d:%02d   Убийств: %d   Уровень: %d" % [floori(t / 60.0), t % 60, GameState.kills, player.level], Vector2(0, 175), 11, Color(0.95, 0.9, 0.9), HORIZONTAL_ALIGNMENT_CENTER)
 	stats.size = Vector2(480, 20)
 	gameover_panel.add_child(stats)
 	var rank_lbl := _mk_label("РАНГ: " + rank_id, Vector2(0, 193), 12, Color(1, 0.85, 0.3), HORIZONTAL_ALIGNMENT_CENTER)

@@ -98,7 +98,8 @@ func _process(delta: float) -> void:
 	var to_p: Vector2 = p.global_position - global_position
 	var dist := to_p.length()
 	var dir := to_p.normalized() if dist > 0.1 else Vector2.ZERO
-	sprite.flip_h = p.global_position.x > global_position.x
+	# спрайты врагов нарисованы мордой ВПРАВО: флипаем, когда игрок слева
+	sprite.flip_h = p.global_position.x < global_position.x
 	_attack_cd -= delta
 
 	# рывок кровавой твари
@@ -107,7 +108,7 @@ func _process(delta: float) -> void:
 		_lunge_cd -= delta
 		if _lunge_t > 0.0:
 			_lunge_t -= delta
-			global_position = GameState.clamp_to_arena(global_position + dir * speed_val * float(cfg["lunge"]["speed_mult"]) * delta, 10.0)
+			global_position = GameState.slide_move(global_position, dir * speed_val * float(cfg["lunge"]["speed_mult"]) * delta, 10.0)
 			if _lunge_t <= 0.0:
 				_lunge_cd = float(cfg["lunge"]["cd"])
 			_touch_damage()
@@ -136,7 +137,7 @@ func _process(delta: float) -> void:
 		if cfg.get("wobble", false):
 			_wobble_t += delta * 6.0
 			step += dir.rotated(PI / 2.0) * sin(_wobble_t) * 36.0 * delta
-		global_position = GameState.clamp_to_arena(global_position + step, 6.0)
+		global_position = GameState.slide_move(global_position, step, 6.0)
 		_play("move_anim")
 
 func _touch_damage() -> void:
@@ -191,7 +192,7 @@ func take_damage(p_dmg: float, from_dir := Vector2.ZERO) -> void:
 	sprite.modulate = Color(3.0, 3.0, 3.0)
 	FX.damage_number(global_position, int(p_dmg))
 	if not is_boss and from_dir != Vector2.ZERO:
-		global_position = GameState.clamp_to_arena(global_position + from_dir * 5.0, 6.0)
+		global_position = GameState.slide_move(global_position, from_dir * 5.0, 6.0)
 	if hp <= 0.0:
 		die()
 	elif cfg.has("hurt_anim") and not _attacking and randf() < 0.35:

@@ -27,13 +27,26 @@ var regen := 0.0
 
 var upgrade_levels := {}
 var sprite: AnimatedSprite2D
+var shadow: Polygon2D
 var _t_dart := 0.4
 var _t_slash := 0.0
 var _iframes := 0.0
 var _regen_acc := 0.0
+var _walk_t := 0.0
 var _dead := false
 
 func _ready() -> void:
+	# тень под ногами (эллипс из кода)
+	shadow = Polygon2D.new()
+	var pts := PackedVector2Array()
+	for i in range(16):
+		var a := TAU * i / 16.0
+		pts.append(Vector2(cos(a) * 6.5, sin(a) * 2.6))
+	shadow.polygon = pts
+	shadow.color = Color(0.0, 0.0, 0.0, 0.4)
+	shadow.position = Vector2(0, 6)
+	shadow.z_index = 9
+	add_child(shadow)
 	sprite = AnimLib.sprite("assets/player/pyro/idle", 3.0, true)
 	add_child(sprite)
 	z_index = 12
@@ -48,11 +61,17 @@ func _process(delta: float) -> void:
 		Input.get_action_strength("ui_down") - Input.get_action_strength("ui_up"))
 	if dir.length() > 0.0:
 		dir = dir.normalized()
-		global_position = GameState.clamp_to_arena(global_position + dir * speed * delta, 8.0)
+		global_position = GameState.slide_move(global_position, dir * speed * delta, 6.0)
 		sprite.flip_h = dir.x < 0.0
 		sprite.speed_scale = 1.7
+		# процедурная "ходьба": покачивание и наклон (в паках нет walk-кадров героя)
+		_walk_t += delta * 11.0
+		sprite.position.y = -absf(sin(_walk_t)) * 2.0
+		sprite.rotation = lerpf(sprite.rotation, dir.x * 0.09, delta * 10.0)
 	else:
 		sprite.speed_scale = 1.0
+		sprite.position.y = lerpf(sprite.position.y, 0.0, delta * 10.0)
+		sprite.rotation = lerpf(sprite.rotation, 0.0, delta * 10.0)
 	# реген
 	if regen > 0.0:
 		_regen_acc += regen * delta
@@ -78,7 +97,14 @@ func _process(delta: float) -> void:
 	if _t_slash <= 0.0:
 		var near := _nearest_enemy(slash_radius + 26.0)
 		if near:
-			Slash.strike(self, global_position, global_position.direction_to(near.global_position), slash_radius, slash_dmg, slash_tier)
+			var ndir := global_position.direction_to(near.global_position)
+			sprite.flip_h = near.global_position.x < global_position.x
+			# микровыпад в сторону цели — читается как анимация атаки
+			global_position = GameState.slide_move(global_position, ndir * 7.0, 6.0)
+			var tw := sprite.create_tween()
+			tw.tween_property(sprite, "scale", Vector2(0.85, 1.18), 0.06)
+			tw.tween_property(sprite, "scale", Vector2.ONE, 0.16)
+			Slash.strike(self, global_position, ndir, slash_radius, slash_dmg, slash_tier)
 			_t_slash = slash_cd
 		else:
 			_t_slash = 0.1
@@ -97,7 +123,13 @@ func _nearest_enemy(max_dist: float) -> Node2D:
 
 func _fire_darts(target: Node2D) -> void:
 	var base_dir := global_position.direction_to(target.global_position)
+	# герой всегда лицом к цели атаки (не "задом")
+	sprite.flip_h = target.global_position.x < global_position.x
 	FX.cast(global_position + Vector2(0, -2))
+	# отдача-пульс каста
+	var tw := sprite.create_tween()
+	tw.tween_property(sprite, "scale", Vector2(1.18, 0.88), 0.06)
+	tw.tween_property(sprite, "scale", Vector2.ONE, 0.14)
 	var n := dart_count
 	for i in range(n):
 		var spread := (i - (n - 1) / 2.0) * 0.13

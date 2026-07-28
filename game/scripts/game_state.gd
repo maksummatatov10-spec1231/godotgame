@@ -1,7 +1,9 @@
 extends Node
 ## Глобальное состояние забега (автозагрузка GameState).
 
-const ARENA_RECT := Rect2(50, 66, 924, 448)  # играбельная зона в пикселях мира
+var arena: TileMapLayer = null
+var map_rect := Rect2(32, 48, 960, 512)    # вся нарисованная карта
+var play_rect := Rect2(50, 66, 924, 448)   # играбельная зона (карта минус стены)
 
 var player: Node2D = null
 var enemies: Array = []
@@ -16,6 +18,8 @@ var minutes: float:
 	get: return run_time / 60.0
 
 func reset() -> void:
+	# arena/map_rect/play_rect НЕ трогаем: Arena регистрирует себя в _ready
+	# (дети сцены готовятся раньше родителя, т.е. до вызова reset из Main)
 	player = null
 	enemies = []
 	pickups = []
@@ -25,11 +29,44 @@ func reset() -> void:
 	game_over = false
 	won = false
 
-func clamp_to_arena(pos: Vector2, margin: float = 0.0) -> Vector2:
-	return Vector2(
-		clampf(pos.x, ARENA_RECT.position.x + margin, ARENA_RECT.end.x - margin),
-		clampf(pos.y, ARENA_RECT.position.y + margin, ARENA_RECT.end.y - margin)
+# ---------- ДВИЖЕНИЕ С ОБХОДОМ СТЕН (коллизии по клеткам TileMap) ----------
+
+func is_walkable(pos: Vector2) -> bool:
+	if arena == null:
+		return play_rect.has_point(pos)
+	return arena.is_walkable(pos)
+
+func _circle_walkable(p: Vector2, r: float) -> bool:
+	return (
+		is_walkable(p)
+		and is_walkable(p + Vector2(r, 0))
+		and is_walkable(p - Vector2(r, 0))
+		and is_walkable(p + Vector2(0, r * 0.6))
+		and is_walkable(p - Vector2(0, r * 0.6))
 	)
+
+func slide_move(from: Vector2, motion: Vector2, radius := 6.0) -> Vector2:
+	# движение по осям: даёт скольжение вдоль стен вместо полной остановки
+	var res := from
+	var tx := Vector2(from.x + motion.x, from.y)
+	if _circle_walkable(tx, radius):
+		res.x = tx.x
+	var ty := Vector2(res.x, from.y + motion.y)
+	if _circle_walkable(ty, radius):
+		res.y = ty.y
+	return res
+
+func random_walkable_near(center: Vector2, min_r: float, max_r: float, margin := 10.0) -> Vector2:
+	# ищем проходимую точку кольцом вокруг center
+	for i in range(10):
+		var r := randf_range(min_r, max_r + 20.0)
+		var pos := center + Vector2.from_angle(randf() * TAU) * r
+		if play_rect.has_point(pos) and _circle_walkable(pos, margin):
+			return pos
+	# запасной вариант — центр карты
+	return play_rect.get_center()
+
+# ---------- СТАТИСТИКА ----------
 
 func score() -> int:
 	return kills + int(run_time * 0.25)

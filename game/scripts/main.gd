@@ -36,10 +36,11 @@ func _ready() -> void:
 	camera = Camera2D.new()
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 6.0
-	camera.limit_left = 32
-	camera.limit_top = 48
-	camera.limit_right = 992
-	camera.limit_bottom = 528
+	# границы камеры = играбельная зона + 1.5 тайла стен вокруг
+	camera.limit_left = int(GameState.play_rect.position.x) - 24
+	camera.limit_top = int(GameState.play_rect.position.y) - 24
+	camera.limit_right = int(GameState.play_rect.end.x) + 24
+	camera.limit_bottom = int(GameState.play_rect.end.y) + 24
 	player.add_child(camera)
 	camera.make_current()
 	# HUD
@@ -158,12 +159,16 @@ func _pick_type(t: float) -> String:
 
 func _ring_pos(radius := 170.0, jitter := 0.0, anywhere := false) -> Vector2:
 	var p := GameState.player
-	var base := p.global_position if p else Vector2(512, 288)
-	var r := radius + randf_range(0.0, 30.0 + jitter)
-	var pos := base + Vector2.from_angle(randf() * TAU) * r
+	var base := p.global_position if p else GameState.play_rect.get_center()
 	if anywhere:
-		pos = Vector2(randf_range(80, 944), randf_range(90, 490))
-	return GameState.clamp_to_arena(pos, 14.0)
+		for i in range(12):
+			var pos := Vector2(
+				randf_range(GameState.play_rect.position.x + 20.0, GameState.play_rect.end.x - 20.0),
+				randf_range(GameState.play_rect.position.y + 20.0, GameState.play_rect.end.y - 20.0))
+			if GameState.is_walkable(pos):
+				return pos
+		return GameState.play_rect.get_center()
+	return GameState.random_walkable_near(base, radius, radius + 30.0 + jitter, 12.0)
 
 func _spawn_enemy(type: String, pos: Vector2, elite := false) -> Enemy:
 	var e := Enemy.create(type, elite)
@@ -192,7 +197,7 @@ func _skull_ring() -> void:
 	var type := "skull" if GameState.minutes < 3.0 else ("goblin" if randf() < 0.5 else "skull")
 	for i in range(n):
 		var e := _spawn_enemy(type, Vector2.ZERO)
-		e.global_position = GameState.clamp_to_arena(player.global_position + Vector2.from_angle(TAU * i / n) * 150.0, 14.0)
+		e.global_position = GameState.random_walkable_near(player.global_position, 130.0, 170.0, 12.0)
 	FX.sparkle(player.global_position, 1.1)
 	hud.flash("КОЛЬЦО ТЕНЕЙ!", 1.6)
 
@@ -235,8 +240,8 @@ func _separate_enemies() -> void:
 			var min_d := (a.radius + b.radius) * 0.85
 			if dist < min_d and dist > 0.01:
 				var push := d.normalized() * (min_d - dist) * 0.4
-				a.global_position = GameState.clamp_to_arena(a.global_position + push, 6.0)
-				b.global_position = GameState.clamp_to_arena(b.global_position - push, 6.0)
+				a.global_position = GameState.slide_move(a.global_position, push, 6.0)
+				b.global_position = GameState.slide_move(b.global_position, -push, 6.0)
 
 # ---------------- СОБЫТИЯ ----------------
 
