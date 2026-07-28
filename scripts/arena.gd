@@ -9,13 +9,17 @@ const TS := 16
 # atlas-строки, считающиеся СТЕНАМИ (непроходимыми) — см. tutorial
 const WALL_ROWS := [0, 4, 5, 7]
 @export var default_paint := true  # сними галку, если рисуешь карту полностью сам
+@export var demo_paint := false    # вкл только в обучающей сцене demo_map.tscn
 var painted_default := false        # true, если арена нарисована кодом по умолчанию
 
 func _ready() -> void:
 	GameState.arena = self
+	if get_used_rect().size == Vector2i.ZERO:
+		if demo_paint:
+			_paint_demo()
+		elif default_paint:
+			_paint_default()
 	GameState.map_rect = _map_rect()
-	if default_paint and get_used_rect().size == Vector2i.ZERO:
-		_paint_default()
 	GameState.play_rect = _play_rect()
 
 func is_walkable(world_pos: Vector2) -> bool:
@@ -84,3 +88,54 @@ func _paint_default() -> void:
 		set_cell(Vector2i(tx, 3), 0, Vector2i(9, 3))
 	# дверь внизу по центру
 	set_cell(Vector2i(int(w_size / 2.0), h_size - 3), 0, Vector2i(8, 3))
+
+# ---------- ОБУЧАЮЩАЯ КАРТА (demo_map.tscn): зал с колоннами, дверью и проёмом ----------
+# Показывает правильную структуру: cap(ряд 0)+face(ряд 4) сверху, face+shad(ряд 5) снизу,
+# боковые стены столбцом face, пол из рядов 1-3, редкие треснувшие плиты ряда 6.
+
+func _paint_demo() -> void:
+	seed(7)
+	var floor_pool: Array = []
+	for r in [1, 2, 3]:
+		for c in range(1, 5):
+			floor_pool.append(Vector2i(c, r))
+	var cap: Array = []
+	for c in range(1, 6):
+		cap.append(Vector2i(c, 0))
+	var face: Array = []
+	for c in range(0, 6):
+		face.append(Vector2i(c, 4))
+	# пол
+	for ty in range(4, 20):
+		for tx in range(3, 37):
+			var t: Vector2i = floor_pool[randi() % floor_pool.size()]
+			if randf() < 0.08:  # треснувшие плиты для живости
+				t = Vector2i(randi() % 4, 6)
+			set_cell(Vector2i(tx, ty), 0, t)
+	# верхняя стена: cap + face
+	for tx in range(2, 38):
+		set_cell(Vector2i(tx, 2), 0, cap[tx % cap.size()])
+		set_cell(Vector2i(tx, 3), 0, face[tx % face.size()])
+	# нижняя стена: face + shad
+	for tx in range(2, 38):
+		set_cell(Vector2i(tx, 20), 0, face[tx % face.size()])
+		set_cell(Vector2i(tx, 21), 0, Vector2i(tx % 3, 5))
+	# боковые стены
+	for ty in range(4, 20):
+		set_cell(Vector2i(2, ty), 0, face[ty % face.size()])
+		set_cell(Vector2i(37, ty), 0, face[ty % face.size()])
+	# дверь внизу по центру + проём в верхней стене
+	set_cell(Vector2i(20, 20), 0, Vector2i(8, 3))
+	for gap in [19, 20, 21]:
+		set_cell(Vector2i(gap, 2), 0, Vector2i(2, 1))
+		set_cell(Vector2i(gap, 3), 0, Vector2i(3, 2))
+	# колонны 2x2 (капители сверху, грани снизу) — непроходимые
+	for p in [Vector2i(10, 8), Vector2i(27, 8), Vector2i(10, 15), Vector2i(27, 15)]:
+		set_cell(p, 0, Vector2i(1, 0))
+		set_cell(p + Vector2i(1, 0), 0, Vector2i(3, 0))
+		set_cell(p + Vector2i(0, 1), 0, Vector2i(1, 4))
+		set_cell(p + Vector2i(1, 1), 0, Vector2i(3, 4))
+	# декор стен: знамя (вне проёма!), цепи, череп
+	set_cell(Vector2i(17, 3), 0, Vector2i(4, 7))
+	set_cell(Vector2i(12, 3), 0, Vector2i(5, 7))
+	set_cell(Vector2i(29, 3), 0, Vector2i(7, 7))

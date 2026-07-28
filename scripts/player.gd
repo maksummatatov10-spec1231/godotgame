@@ -27,13 +27,22 @@ var regen := 0.0
 
 var upgrade_levels := {}
 var sprite: AnimatedSprite2D
+var body: Node2D           # обёртка спрайта: пульс каста не конфликтует с походкой
 var shadow: Polygon2D
 var _t_dart := 0.4
 var _t_slash := 0.0
 var _iframes := 0.0
 var _regen_acc := 0.0
 var _walk_t := 0.0
+var _step_t := 0.0
 var _dead := false
+
+# вспышка каста в цвет текущего пламени (золото → … → красное)
+const CAST_GLOW := [
+	Color(1.7, 1.5, 0.75), Color(1.7, 1.35, 0.6), Color(1.75, 1.05, 0.55),
+	Color(0.8, 1.7, 0.8), Color(0.7, 1.2, 1.8), Color(1.3, 0.8, 1.8),
+	Color(1.8, 0.7, 1.5), Color(1.9, 0.6, 0.6),
+]
 
 func _ready() -> void:
 	# тень под ногами (эллипс из кода)
@@ -45,10 +54,13 @@ func _ready() -> void:
 	shadow.polygon = pts
 	shadow.color = Color(0.0, 0.0, 0.0, 0.4)
 	shadow.position = Vector2(0, 6)
-	shadow.z_index = 9
+	shadow.z_index = -2          # под спрайтом героя (z спрайта 0 относительно нас)
 	add_child(shadow)
+	body = Node2D.new()
+	body.name = "Body"
+	add_child(body)
 	sprite = AnimLib.sprite("assets/player/pyro/idle", 3.0, true)
-	add_child(sprite)
+	body.add_child(sprite)
 	z_index = 12
 	GameState.player = self
 
@@ -63,13 +75,21 @@ func _process(delta: float) -> void:
 		dir = dir.normalized()
 		global_position = GameState.slide_move(global_position, dir * speed * delta, 6.0)
 		sprite.flip_h = dir.x < 0.0
-		sprite.speed_scale = 1.7
-		# процедурная "ходьба": покачивание и наклон (в паках нет walk-кадров героя)
+		sprite.speed_scale = 2.6   # быстрый переступ двух кадров = "шагаем"
+		# процедурная "ходьба": покачивание, присяд в такт, наклон (в паках нет walk-кадров героя)
 		_walk_t += delta * 11.0
-		sprite.position.y = -absf(sin(_walk_t)) * 2.0
-		sprite.rotation = lerpf(sprite.rotation, dir.x * 0.09, delta * 10.0)
+		sprite.position.y = -absf(sin(_walk_t)) * 2.2
+		var squash := sin(_walk_t * 2.0)
+		sprite.scale = Vector2(1.0 + squash * 0.05, 1.0 - squash * 0.06)
+		sprite.rotation = lerpf(sprite.rotation, dir.x * 0.10, delta * 10.0)
+		# пыль из-под ног
+		_step_t -= delta
+		if _step_t <= 0.0:
+			_step_t = 0.26
+			FX.smoke(global_position + Vector2(0, 5), 0.22, 8)
 	else:
 		sprite.speed_scale = 1.0
+		sprite.scale = sprite.scale.lerp(Vector2.ONE, delta * 10.0)
 		sprite.position.y = lerpf(sprite.position.y, 0.0, delta * 10.0)
 		sprite.rotation = lerpf(sprite.rotation, 0.0, delta * 10.0)
 	# реген
@@ -101,9 +121,10 @@ func _process(delta: float) -> void:
 			sprite.flip_h = near.global_position.x < global_position.x
 			# микровыпад в сторону цели — читается как анимация атаки
 			global_position = GameState.slide_move(global_position, ndir * 7.0, 6.0)
-			var tw := sprite.create_tween()
-			tw.tween_property(sprite, "scale", Vector2(0.85, 1.18), 0.06)
-			tw.tween_property(sprite, "scale", Vector2.ONE, 0.16)
+			var tw := body.create_tween()
+			tw.tween_property(body, "scale", Vector2(0.85, 1.18), 0.06)
+			tw.tween_property(body, "scale", Vector2.ONE, 0.16)
+			FX.sparkle(global_position + ndir * slash_radius * 0.5, 0.2)
 			Slash.strike(self, global_position, ndir, slash_radius, slash_dmg, slash_tier)
 			_t_slash = slash_cd
 		else:
@@ -125,11 +146,17 @@ func _fire_darts(target: Node2D) -> void:
 	var base_dir := global_position.direction_to(target.global_position)
 	# герой всегда лицом к цели атаки (не "задом")
 	sprite.flip_h = target.global_position.x < global_position.x
-	FX.cast(global_position + Vector2(0, -2))
-	# отдача-пульс каста
-	var tw := sprite.create_tween()
-	tw.tween_property(sprite, "scale", Vector2(1.18, 0.88), 0.06)
-	tw.tween_property(sprite, "scale", Vector2.ONE, 0.14)
+	FX.cast(global_position + Vector2(0, -3))
+	# вспышка "руки": искра в точке вылета снаряда
+	FX.impact_yellow(global_position + base_dir * 10.0 + Vector2(0, -3), 0.13)
+	# отдача-пульс каста на обёртке (не конфликтует с походкой)
+	var tw := body.create_tween()
+	tw.tween_property(body, "scale", Vector2(1.18, 0.88), 0.06)
+	tw.tween_property(body, "scale", Vector2.ONE, 0.14)
+	# магическая вспышка в цвет текущего пламени
+	sprite.modulate = CAST_GLOW[mini(dart_tier, 7)]
+	var fw := sprite.create_tween()
+	fw.tween_property(sprite, "modulate", Color.WHITE, 0.18)
 	var n := dart_count
 	for i in range(n):
 		var spread := (i - (n - 1) / 2.0) * 0.13

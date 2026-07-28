@@ -29,7 +29,7 @@ static func crown(pos: Vector2) -> void: spawn("assets/ui/crown", pos + Vector2(
 static func smoke_skull(pos: Vector2, scale := 0.8) -> void: spawn("assets/effects/skull_smoke", pos, 14.0, scale)
 static func coin_burst(pos: Vector2, scale := 0.6) -> void: spawn("assets/effects/coin_burst", pos, 18.0, scale)
 static func heart_burst(pos: Vector2, scale := 0.6) -> void: spawn("assets/effects/heart_burst", pos, 16.0, scale)
-static func smoke(pos: Vector2, scale := 0.5) -> void: spawn("assets/effects/smoke_burst", pos, 15.0, scale)
+static func smoke(pos: Vector2, scale := 0.5, z := 60) -> void: spawn("assets/effects/smoke_burst", pos, 15.0, scale, z)
 static func cast(pos: Vector2) -> void: spawn("assets/bullets/cast", pos, 14.0, 0.8, 15)
 
 # всплывающие цифры урона/лечения
