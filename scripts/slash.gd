@@ -23,6 +23,13 @@ static func strike(caller: Node, pos: Vector2, dir: Vector2, p_radius: float, p_
 		var to_e: Vector2 = e.global_position - pos
 		if to_e.length() < p_radius + 20.0 and to_e.normalized().dot(dir) > 0.2:
 			e.take_damage(p_dmg, dir)
+	# ящики в дуге удара разлетаются щепками
+	for c in GameState.breakables:
+		if not is_instance_valid(c):
+			continue
+		var to_c: Vector2 = c.global_position - pos
+		if to_c.length() < p_radius + 20.0 and to_c.normalized().dot(dir) > 0.2:
+			c.break_apart()
 	FX.spawn("assets/effects/impact_yellow", pos + dir * (p_radius * 0.5), 18.0, 0.3)
 	caller.get_parent().get_node("Effects").add_child(s)
 	return s

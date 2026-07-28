@@ -251,11 +251,11 @@ func _decorate() -> void:
 		var s := Spikes.new()
 		s.global_position = pos
 		decor_node.add_child(s)
-	# разбросанные ящики
-	for pos in [Vector2(120, 100), Vector2(138, 108), Vector2(900, 120), Vector2(880, 480), Vector2(110, 470)]:
-		var b := AnimLib.sprite("assets/items/box1" if randf() < 0.5 else "assets/items/box2", 5.0, true)
-		b.global_position = pos
-		decor_node.add_child(b)
+	# разрушаемые ящики с добычей (ударь дротиком или полумесяцем!)
+	for pos in [Vector2(120, 100), Vector2(138, 108), Vector2(900, 120), Vector2(880, 480),
+			Vector2(110, 470), Vector2(300, 130), Vector2(720, 110), Vector2(240, 370),
+			Vector2(780, 400), Vector2(512, 420)]:
+		decor_node.add_child(Crate.spawn(pos))
 	# флаг над точкой спавна
 	var flag := AnimLib.sprite("assets/items/flag", 6.0, true)
 	flag.global_position = Vector2(512, 236)

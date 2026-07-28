@@ -9,6 +9,7 @@ var player: Node2D = null
 var player_name := "ГЕРОЙ"   # задаётся в главном меню (живёт между рестартами)
 var enemies: Array = []
 var pickups: Array = []
+var breakables: Array = []   # разрушаемые ящики (crate.gd)
 var closed_doors := {}          # Vector2i -> Door: закрытые двери (непроходимы, см. door.gd)
 var kills := 0
 var run_time := 0.0
@@ -50,6 +51,7 @@ func reset() -> void:
 	player = null
 	enemies = []
 	pickups = []
+	breakables = []
 	closed_doors = {}
 	kills = 0
 	run_time = 0.0

@@ -113,6 +113,14 @@ func _check_enemies() -> void:
 			else:
 				_fizzle()
 			return
+	# разрушаемые ящики — дротик разбивает их как врага
+	for c in GameState.breakables:
+		if not is_instance_valid(c):
+			continue
+		if global_position.distance_to(c.global_position) < radius + c.radius:
+			c.break_apart()
+			_fizzle(true)
+			return
 
 func _fizzle(with_fx := false) -> void:
 	if with_fx and hit_fx != "":
