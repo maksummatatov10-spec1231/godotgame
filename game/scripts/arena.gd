@@ -9,6 +9,7 @@ const TS := 16
 # atlas-строки, считающиеся СТЕНАМИ (непроходимыми) — см. tutorial
 const WALL_ROWS := [0, 4, 5, 7]
 @export var default_paint := true  # сними галку, если рисуешь карту полностью сам
+var painted_default := false        # true, если арена нарисована кодом по умолчанию
 
 func _ready() -> void:
 	GameState.arena = self
@@ -43,6 +44,7 @@ func _play_rect() -> Rect2:
 # ---------- АРЕНА ПО УМОЛЧАНИЮ (64x36, кольцо стен) ----------
 
 func _paint_default() -> void:
+	painted_default = true
 	seed(11)
 	var floor_pool: Array = []
 	for r in [1, 2, 3]:
@@ -81,4 +83,4 @@ func _paint_default() -> void:
 	for tx in [14, 49]:
 		set_cell(Vector2i(tx, 3), 0, Vector2i(9, 3))
 	# дверь внизу по центру
-	set_cell(Vector2i(w_size / 2, h_size - 3), 0, Vector2i(8, 3))
+	set_cell(Vector2i(int(w_size / 2.0), h_size - 3), 0, Vector2i(8, 3))

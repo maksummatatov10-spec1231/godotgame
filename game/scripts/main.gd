@@ -1,5 +1,21 @@
 extends Node2D
 ## Главная сцена: арена, декор, директор волн, боссы, камера, игровой цикл.
+##
+## === НАСТРОЙКИ БЕЗ КОДА (выдели узел Main в дереве сцены → Инспектор) ===
+## - Спавн врагов: радиус кольца, интервал, лимит врагов.
+## - Камера: зум и плавность.
+## - Лут: вкл/выкл периодический дроп на карту.
+##
+## === ТОЧКИ НА КАРТЕ (добавляй дочерние узлы к Main) ===
+## - Узел "SpawnPoints" (Node2D) с маркерами (Marker2D) внутри — враги лезут ОТТУДА.
+## - Узел "PickupPoints" — там появляются сундуки/флаконы.
+## - Маркер "PlayerStart" — точка появления героя.
+##   (работают и группы: enemy_spawn / pickup_spawn / player_start)
+##
+## === ВТОРОЙ TILEMAP-СЛОЙ (декор) ===
+## Нарисуй на нём монетки/флаконы/ключи/сундуки/факелы/свечи — на старте игры
+## они ОЖИВУТ: тайл стирается, вместо него появляется настоящий предмет.
+## Этот слой НИЧЕГО не блокирует: коллизии считаются только по слою Arena.
 
 var player: Player
 var hud
@@ -10,11 +26,52 @@ var effects_node: Node2D
 var decor_node: Node2D
 var camera: Camera2D
 
+# ---- НАСТРОЙКИ В ИНСПЕКТОРЕ ----
+@export_group("Спавн врагов")
+@export var spawn_radius := 170.0    # радиус кольца вокруг героя (если нет SpawnPoints)
+@export var interval_start := 1.15   # сек между спавнами в начале игры
+@export var interval_min := 0.30     # самый частый интервал (к концу)
+@export var cap_start := 14          # максимум врагов на старте
+@export var cap_max := 64            # жёсткий лимит врагов на карте
+@export_group("Лут")
+@export var world_loot := true       # периодически сыпать монеты/флаконы на карту
+@export_group("Камера")
+@export var camera_zoom := 1.0       # больше — ближе (например 1.5), меньше — дальше
+@export var camera_smooth := 6.0     # скорость плавного догона камеры
+
+# нарисованные на декор-слое тайлы -> подбираемые предметы (atlas-координаты тайлсета)
+const LOOT_TILES := {
+	Vector2i(6, 8): "coin",        # золотая монета
+	Vector2i(7, 8): "gem",         # синий флакон (опыт)
+	Vector2i(7, 9): "gem",         # большой синий флакон
+	Vector2i(9, 8): "heal",        # красный флакон (лечение)
+	Vector2i(8, 9): "heal_big",    # большой красный флакон
+	Vector2i(8, 8): "key_silver",  # серебряный ключ
+	Vector2i(9, 9): "key_gold",    # золотой ключ
+	Vector2i(0, 8): "chest",       # большие сундуки
+	Vector2i(1, 8): "chest",
+	Vector2i(2, 8): "chest",
+	Vector2i(3, 8): "chest",
+	Vector2i(4, 8): "mini_chest",  # мини-сундуки
+	Vector2i(5, 8): "mini_chest",
+}
+# тайлы -> анимированный декор (факелы и свечи горят!)
+const DECOR_TILES := {
+	Vector2i(0, 9): "assets/items/torch",
+	Vector2i(1, 9): "assets/items/torch",
+	Vector2i(2, 9): "assets/items/candle2",
+	Vector2i(3, 9): "assets/items/candle1",
+	Vector2i(5, 9): "assets/items/candle1",
+}
+
 var _spawn_t := 0.0
 var _event_t := 20.0      # кольца мобов
 var _chest_t := 45.0      # периодический сундук
+var _loot_t := 18.0       # периодические монеты/флаконы на карте
+var _loot_cycle := 0
 var _boss_idx := 0
-var _flask_t := 25.0
+var _spawn_points: Array = []
+var _pickup_points: Array = []
 
 func _ready() -> void:
 	GameState.reset()
@@ -25,23 +82,33 @@ func _ready() -> void:
 	enemies_node = _mk("Enemies", 0, 10)
 	bullets_node = _mk("Bullets", 0, 11)
 	FX.effects_root = effects_node
-	_decorate()
+	_collect_markers()
+	_scan_user_layers()   # оживляем тайлы с твоего декор-слоя
+	if GameState.arena and GameState.arena.painted_default:
+		_decorate()       # дефолтный декор — только для дефолтной арены
 	# игрок
 	player = Player.new()
-	player.global_position = Vector2(512, 300)
+	GameState.player = player
+	player.global_position = _player_start()
 	add_child(player)
 	player.leveled_up.connect(_on_level_up)
 	player.died_player.connect(_on_player_died)
-	# камера
-	camera = Camera2D.new()
+	# камера: подхватываем твою Camera2D, если добавил в сцену, иначе создаём свою
+	camera = _find_camera()
+	if camera == null:
+		camera = Camera2D.new()
+		player.add_child(camera)
+	elif camera.get_parent() != player:
+		camera.reparent(player)
+		camera.position = Vector2.ZERO
 	camera.position_smoothing_enabled = true
-	camera.position_smoothing_speed = 6.0
+	camera.position_smoothing_speed = camera_smooth
+	camera.zoom = Vector2(camera_zoom, camera_zoom)
 	# границы камеры = играбельная зона + 1.5 тайла стен вокруг
 	camera.limit_left = int(GameState.play_rect.position.x) - 24
 	camera.limit_top = int(GameState.play_rect.position.y) - 24
 	camera.limit_right = int(GameState.play_rect.end.x) + 24
 	camera.limit_bottom = int(GameState.play_rect.end.y) + 24
-	player.add_child(camera)
 	camera.make_current()
 	# HUD
 	hud = preload("res://scripts/hud.gd").new()
@@ -49,7 +116,7 @@ func _ready() -> void:
 	hud.bind(player)
 	# стартовые прожиточные монстры
 	for i in range(3):
-		_spawn_enemy("skeleton1", player.global_position + Vector2.from_angle(TAU * i / 3) * 120)
+		_spawn_enemy("skeleton1", player.global_position + Vector2.from_angle(TAU * i / 3.0) * 120)
 	hud.flash("ВЫЖИВИ 10 МИНУТ!", 2.6)
 
 func _mk(nname: String, _z := 0, _rel_z := 0) -> Node2D:
@@ -57,6 +124,66 @@ func _mk(nname: String, _z := 0, _rel_z := 0) -> Node2D:
 	n.name = nname
 	add_child(n)
 	return n
+
+func _find_camera() -> Camera2D:
+	for n in find_children("*", "Camera2D", true, false):
+		return n as Camera2D
+	return null
+
+# ---------------- ТОЧКИ/МАРКЕРЫ ИЗ РЕДАКТОРА ----------------
+
+func _collect_markers() -> void:
+	_spawn_points.clear()
+	_pickup_points.clear()
+	var sp := get_node_or_null("SpawnPoints")
+	if sp:
+		for c in sp.get_children():
+			if c is Node2D:
+				_spawn_points.append((c as Node2D).global_position)
+	var pp := get_node_or_null("PickupPoints")
+	if pp:
+		for c in pp.get_children():
+			if c is Node2D:
+				_pickup_points.append((c as Node2D).global_position)
+	for c in get_tree().get_nodes_in_group("enemy_spawn"):
+		if c is Node2D:
+			_spawn_points.append((c as Node2D).global_position)
+	for c in get_tree().get_nodes_in_group("pickup_spawn"):
+		if c is Node2D:
+			_pickup_points.append((c as Node2D).global_position)
+
+func _player_start() -> Vector2:
+	var ps := get_node_or_null("PlayerStart")
+	if ps is Node2D:
+		return (ps as Node2D).global_position
+	for c in get_tree().get_nodes_in_group("player_start"):
+		if c is Node2D:
+			return (c as Node2D).global_position
+	if GameState.arena and GameState.arena.painted_default:
+		return Vector2(512, 300)
+	return GameState.play_rect.get_center()
+
+# ---------------- ОЖИВЛЕНИЕ ДЕКОР-СЛОЯ ----------------
+
+func _scan_user_layers() -> void:
+	# все TileMapLayer в сцене, кроме арены: монеты/флаконы -> предметы, факелы -> огонь
+	for n in find_children("*", "TileMapLayer", true, false):
+		var layer := n as TileMapLayer
+		if layer == null or layer == GameState.arena:
+			continue
+		for cell in layer.get_used_cells():
+			var ac := layer.get_cell_atlas_coords(cell)
+			var wpos := layer.to_global(layer.map_to_local(cell))
+			if LOOT_TILES.has(ac):
+				pickups_node.add_child(Pickup.spawn(LOOT_TILES[ac], wpos))
+				layer.erase_cell(cell)
+			elif DECOR_TILES.has(ac):
+				var spr := AnimLib.sprite(DECOR_TILES[ac], 6.0, true)
+				spr.global_position = wpos
+				decor_node.add_child(spr)
+				layer.erase_cell(cell)
+
+# ---------------- ДЕФОЛТНЫЙ ДЕКОР (только для дефолтной арены) ----------------
 
 func _decorate() -> void:
 	# факелы на верхней стене
@@ -112,29 +239,36 @@ func _process(delta: float) -> void:
 func _wave_director(delta: float) -> void:
 	var m := GameState.minutes
 	# интервал спавна ускоряется
-	var interval := maxf(0.30, 1.15 - m * 0.10)
-	var cap := mini(14 + int(m * 9.0), 64)
+	var interval := maxf(interval_min, interval_start - m * 0.10)
+	var cap := mini(cap_start + int(m * 9.0), cap_max)
 	_spawn_t += delta
 	if _spawn_t >= interval and enemies_node.get_child_count() < cap:
 		_spawn_t = 0.0
-		_spawn_enemy(_pick_type(GameState.run_time), _ring_pos(170.0, 60.0, m >= 5.0))
+		_spawn_enemy(_pick_type(GameState.run_time), _spawn_pos(m >= 5.0))
 	# элитки после 4-й минуты
 	if m >= 4.0 and randf() < delta * 0.055:
-		_spawn_enemy(_pick_type(GameState.run_time), _ring_pos(190.0), true)
+		_spawn_enemy(_pick_type(GameState.run_time), _spawn_pos(true), true)
 	# кольца мобов-сюрпризов
 	_event_t -= delta
 	if _event_t <= 0.0:
 		_event_t = 42.0
 		_skull_ring()
-	# периодический сундук и флаконы
+	# периодический сундук
 	_chest_t -= delta
 	if _chest_t <= 0.0:
 		_chest_t = 55.0
 		_spawn_pickup("chest")
-	_flask_t -= delta
-	if _flask_t <= 0.0:
-		_flask_t = 30.0
-		_spawn_pickup("heal")
+	# монетки и флаконы на карту
+	if world_loot:
+		_loot_t -= delta
+		if _loot_t <= 0.0:
+			_loot_t = 20.0
+			_spawn_pickup("coin")
+			_spawn_pickup("coin")
+			# флаконы по кругу: лечение, опыт, большой флакон
+			var cycle := ["heal", "gem", "elixir", "heal_big"]
+			_spawn_pickup(cycle[_loot_cycle % cycle.size()])
+			_loot_cycle += 1
 	# боссы по расписанию
 	if _boss_idx < Data.BOSS_SCHEDULE.size():
 		var bs: Dictionary = Data.BOSS_SCHEDULE[_boss_idx]
@@ -156,6 +290,18 @@ func _pick_type(t: float) -> String:
 		if r < 0:
 			return pair[0]
 	return table[0][0]
+
+func _spawn_pos(anywhere := false) -> Vector2:
+	# 1) твои точки SpawnPoints / группа enemy_spawn
+	if not _spawn_points.is_empty():
+		for i in range(8):
+			var base: Vector2 = _spawn_points[randi() % _spawn_points.size()]
+			var pos := base + Vector2(randf_range(-10.0, 10.0), randf_range(-10.0, 10.0))
+			if GameState.is_walkable(pos):
+				return pos
+		return _spawn_points[randi() % _spawn_points.size()]
+	# 2) иначе — кольцо вокруг героя
+	return _ring_pos(spawn_radius, 60.0, anywhere)
 
 func _ring_pos(radius := 170.0, jitter := 0.0, anywhere := false) -> Vector2:
 	var p := GameState.player
@@ -180,7 +326,7 @@ func _spawn_enemy(type: String, pos: Vector2, elite := false) -> Enemy:
 
 func _spawn_boss(type: String, hp_mult: float) -> void:
 	var b := Enemy.create_boss(type, hp_mult)
-	b.global_position = _ring_pos(200.0)
+	b.global_position = _spawn_pos(true)
 	enemies_node.add_child(b)
 	GameState.enemies.append(b)
 	GameState.current_boss = b
@@ -189,8 +335,13 @@ func _spawn_boss(type: String, hp_mult: float) -> void:
 	hud.flash("БОСС: %s!" % Data.BOSSES[type]["title"], 2.2)
 
 func _spawn_pickup(kind: String, pos := Vector2.ZERO) -> void:
-	var p := Pickup.spawn(kind, pos if pos != Vector2.ZERO else _ring_pos(randf_range(60.0, 140.0)))
-	pickups_node.add_child(p)
+	var where := pos
+	if where == Vector2.ZERO:
+		if not _pickup_points.is_empty():
+			where = _pickup_points[randi() % _pickup_points.size()]
+		else:
+			where = _ring_pos(randf_range(60.0, 140.0))
+	pickups_node.add_child(Pickup.spawn(kind, where))
 
 func _skull_ring() -> void:
 	var n := mini(6 + int(GameState.minutes * 2), 14)
@@ -207,22 +358,30 @@ func _on_enemy_died(e: Enemy) -> void:
 	GameState.kills += 1
 	if e.is_boss:
 		_spawn_pickup("chest", e.global_position)
-		_spawn_pickup("heal", e.global_position + Vector2(18, 8))
+		_spawn_pickup("heal_big", e.global_position + Vector2(18, 8))
+		_spawn_pickup("key_gold", e.global_position + Vector2(-18, 8))
 		if GameState.player:
 			FX.crown(GameState.player.global_position)
 		GameState.current_boss = null
 		hud.flash("БОСС ПОВЕРЖЕН!", 2.0)
 		return
-	# дроп
+	# дроп: монеты, флаконы, ключи — падают из врагов
+	var cc: float = e.cfg.get("coin_chance", 0.45)
 	var r := randf()
 	if e.elite:
 		_spawn_pickup("chest", e.global_position)
-	elif r < e.cfg.get("coin_chance", 0.4):
+		_spawn_pickup("coin", e.global_position + Vector2(10, 4))
+		_spawn_pickup("coin", e.global_position - Vector2(10, 4))
+	elif r < cc:
 		_spawn_pickup("coin", e.global_position + Vector2(randf_range(-4, 4), randf_range(-4, 4)))
-	elif r < e.cfg.get("coin_chance", 0.4) + 0.06:
+	elif r < cc + 0.10:
 		_spawn_pickup("heal", e.global_position)
-	elif r < e.cfg.get("coin_chance", 0.4) + 0.12:
+	elif r < cc + 0.18:
 		_spawn_pickup("gem", e.global_position)
+	elif r < cc + 0.22:
+		_spawn_pickup("elixir", e.global_position)
+	elif r < cc + 0.24:
+		_spawn_pickup("key_silver", e.global_position)
 
 func _separate_enemies() -> void:
 	var arr := enemies_node.get_children()
