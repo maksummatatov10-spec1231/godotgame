@@ -12,6 +12,8 @@ var hit_fx := ""
 var hit_fx_scale := 0.24
 var radius := 6.0
 var rot_offset := 0.0  # дротик нарисован влево, комета — вправо
+var trail := false     # магический шлейф (дротики 5+ тира)
+var _trail_t := 0.0
 
 var _sprite: AnimatedSprite2D
 var _hit_ids := []
@@ -43,6 +45,7 @@ static func dart(pos: Vector2, d: Vector2, p_speed: float, p_dmg: float, tier: i
 	b.hit_fx = cfg["hit_fx"]
 	b.hit_fx_scale = cfg["hit_fx_scale"]
 	b.rot_offset = PI  # кадры смотрят влево
+	b.trail = tier >= 5  # фиолетовое пламя и выше оставляет искристый шлейф
 	b.global_position = pos
 	b.z_index = 11
 	b._sprite = AnimLib.sprite("assets/bullets/dart/" + Data.DART_COLORS[tier], cfg["fps"], true)
@@ -78,6 +81,11 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	global_position += dir * speed * delta
 	life -= delta
+	if trail:
+		_trail_t -= delta
+		if _trail_t <= 0.0:  # шлейф из искр за снарядом
+			_trail_t = 0.05
+			FX.sparkle(global_position, 0.12)
 	if life <= 0.0 or not GameState.map_rect.grow(40).has_point(global_position):
 		_fizzle()
 		return
@@ -104,7 +112,14 @@ func _check_enemies() -> void:
 			continue
 		if global_position.distance_to(e.global_position) < radius + e.radius:
 			_hit_ids.append(e.get_instance_id())
-			e.take_damage(dmg, dir)
+			GameState.shots_hit += 1
+			var final_dmg := dmg
+			var crit := randf() < 0.10  # крит: 10% шанс, двойной урон, крупная цифра
+			if crit:
+				final_dmg *= 2.0
+				SFX.play("crit", -4.0)
+				FX.sparkle(e.global_position, 0.2)
+			e.take_damage(final_dmg, dir, crit)
 			SFX.play("hit", -10.0)
 			if hit_fx != "":
 				FX.spawn(hit_fx, e.global_position, 18.0, hit_fx_scale)

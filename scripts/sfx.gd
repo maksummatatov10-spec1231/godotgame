@@ -50,6 +50,8 @@ const LEVELS := {
 	"step_4": 24.0,
 	"vampire_shot": -12.0,
 	"comet_hit": -6.0,
+	"dash": 6.0,          # рывок — записан тихо, усилен при сборке
+	"crit": -10.0,        # крит — короткий яркий звон
 }
 const MUSIC_DB := -14.0
 # подстройка каждого трека относительно MUSIC_DB (по измеренной громкости,
@@ -65,8 +67,27 @@ const MUSIC_LEVELS := {
 static var _pool: Array = []
 static var _idx := 0
 static var _music: AudioStreamPlayer = null
+static var _music_name := ""     # какой трек сейчас должен играть (для вкл/выкл)
 static var _variants_cache := {}
-static var enabled := true
+static var enabled := true       # звуковые эффекты (переключатель в настройках)
+static var music_enabled := true # музыка (переключатель в настройках)
+
+const HEAR_RANGE := 340.0   # дальше этого — мировой звук не играем вовсе
+const FULL_RANGE := 70.0    # до этого расстояния — звук на полной громкости
+
+## позиционный звук: громкость падает с расстоянием до героя,
+## дальние события не озвучиваются (чтобы мир жил объёмно, а не гудел)
+static func play_at(sname: String, pos: Vector2, vol := 0.0, pitch := 1.0) -> void:
+	var pl := GameState.player
+	if pl == null or not is_instance_valid(pl):
+		return
+	var d: float = pos.distance_to(pl.global_position)
+	if d > HEAR_RANGE:
+		return
+	var fade := 0.0
+	if d > FULL_RANGE:
+		fade = -clampf((d - FULL_RANGE) * 0.075, 0.0, 18.0)
+	play(sname, vol + fade, pitch)
 
 # вызывается из Main._ready (и после рестарта — пересоздаёт плееры на новой сцене)
 static func attach(root: Node) -> void:
@@ -121,6 +142,9 @@ static func play(sname: String, vol := 0.0, pitch := 1.0) -> void:
 	p.play()
 
 static func play_music(sname: String) -> void:
+	_music_name = sname
+	if not music_enabled:
+		return
 	var list: Array = _variants(sname)
 	if list.is_empty() or _music == null:
 		return
@@ -140,6 +164,16 @@ static func play_music(sname: String) -> void:
 static func music_off() -> void:
 	if _music:
 		_music.stop()
+
+## переключатель музыки из настроек (пауза): мгновенно глушит или возвращает трек
+static func set_music_enabled(on: bool) -> void:
+	music_enabled = on
+	if not on:
+		music_off()
+	elif _music_name != "":
+		var keep := _music_name
+		_music_name = ""    # хитрость: play_music сам запишет имя заново
+		play_music(keep)
 
 static func set_music_volume(vol_db: float) -> void:
 	if _music:

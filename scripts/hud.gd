@@ -31,6 +31,12 @@ var embers: CPUParticles2D  # летящие искры
 var nick_edit: LineEdit
 var _menu_t := 0.0
 var _menu_intro := 0.0      # идёт анимация появления меню
+# настройки/миникарта/эффекты
+var minimap: Control
+var boss_arrow: TextureRect # стрелка на краю экрана к боссу за кадром
+var combo_label: Label
+var white_flash: ColorRect  # белая вспышка (смерть босса)
+var _settings_rows := []    # строки переключателей на паузе
 var _cards := []
 var _pending_upgrades := []
 var _paused := false
@@ -53,6 +59,28 @@ func _ready() -> void:
 	_build_win()
 	_build_pause()
 	_build_menu()
+	# мини-карта (рисуется кодом, обновляется каждый кадр)
+	minimap = Control.new()
+	minimap.position = Vector2(378, 210)
+	minimap.size = Vector2(98, 56)
+	minimap.visible = false
+	minimap.draw.connect(_mm_draw)
+	add_child(minimap)
+	# стрелка-указатель на босса за экраном
+	boss_arrow = TextureRect.new()
+	boss_arrow.texture = _tex("arrow_wood")
+	boss_arrow.size = Vector2(8, 26)
+	boss_arrow.pivot_offset = Vector2(4, 13)
+	boss_arrow.stretch_mode = TextureRect.STRETCH_KEEP
+	boss_arrow.visible = false
+	add_child(boss_arrow)
+	# белая вспышка поверх всего (на смерть босса)
+	white_flash = ColorRect.new()
+	white_flash.size = Vector2(480, 270)
+	white_flash.color = Color(1, 1, 1)
+	white_flash.modulate.a = 0.0
+	white_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(white_flash)
 	var credits := _mk_label("ui: FantasyUIfree | sfx: Minifantasy/8Bit/SfxPack4/JDSherbert/Hel Circle | dungeon: pixel_poem | fx: unTied Games", Vector2(4, 260), 7, Color(0.55, 0.5, 0.6, 0.8))
 	add_child(credits)
 
@@ -139,6 +167,51 @@ func _build_bars() -> void:
 	flash_label = _mk_label("", Vector2(0, 60), 16, Color(1, 0.9, 0.4), HORIZONTAL_ALIGNMENT_CENTER)
 	flash_label.size = Vector2(480, 24)
 	add_child(flash_label)
+	# комбо-счётчик серии убийств
+	combo_label = _mk_label("", Vector2(0, 26), 11, Color(1, 0.65, 0.2), HORIZONTAL_ALIGNMENT_CENTER)
+	combo_label.size = Vector2(480, 14)
+	add_child(combo_label)
+
+## белая вспышка на весь экран (слоу-мо смерти босса)
+func flash_screen() -> void:
+	white_flash.modulate.a = 0.85
+	var tw := white_flash.create_tween()
+	tw.tween_property(white_flash, "modulate:a", 0.0, 0.4)
+
+## отрисовка мини-карты (сигнал draw узла minimap)
+func _mm_draw() -> void:
+	var pr := GameState.play_rect
+	if pr.size.x < 1.0:
+		return
+	var sc: Vector2 = minimap.size / pr.size
+	minimap.draw_rect(Rect2(Vector2.ZERO, minimap.size), Color(0.02, 0.02, 0.06, 0.75), true)
+	minimap.draw_rect(Rect2(Vector2.ZERO, minimap.size), Color(0.75, 0.6, 0.35, 0.9), false, 1.0)
+	var dot := func(p: Vector2, c: Color, r: float) -> void:
+		var lp: Vector2 = (p - pr.position) * sc
+		lp = lp.clamp(Vector2(2.5, 2.5), minimap.size - Vector2(2.5, 2.5))
+		minimap.draw_circle(lp, r, c)
+	# закрытые двери — янтарные точки
+	if GameState.arena and is_instance_valid(GameState.arena):
+		for cell2 in GameState.closed_doors:
+			dot.call(GameState.arena.to_global(GameState.arena.map_to_local(cell2)), Color(0.85, 0.55, 0.2), 1.6)
+	# сундуки — золотые, мелкий лут — голубой
+	for pk in GameState.pickups:
+		if not is_instance_valid(pk):
+			continue
+		if pk.is_chest():
+			dot.call(pk.global_position, Color(1.0, 0.8, 0.2), 2.0)
+		else:
+			dot.call(pk.global_position, Color(0.4, 0.8, 1.0, 0.85), 1.0)
+	# врагада — красные точки
+	for e in GameState.enemies:
+		if is_instance_valid(e) and not e.dead and not e.is_boss:
+			dot.call(e.global_position, Color(1.0, 0.3, 0.3), 1.4)
+	# босс — крупная фиолетовая точка
+	if GameState.current_boss and is_instance_valid(GameState.current_boss):
+		dot.call(GameState.current_boss.global_position, Color(1.0, 0.2, 0.85), 3.0)
+	# герой — белая точка
+	if player and is_instance_valid(player):
+		dot.call(player.global_position, Color(1, 1, 1), 2.2)
 
 func _dim(color: Color) -> ColorRect:
 	var dim := ColorRect.new()
@@ -246,28 +319,83 @@ func _build_win() -> void:
 	win_panel.add_child(board)
 
 func _build_pause() -> void:
+	# пауза = панель НАСТРОЕК: всё переключается прямо во время игры (клик/1-5)
 	pause_panel = Control.new()
 	pause_panel.visible = false
 	add_child(pause_panel)
-	pause_panel.add_child(_dim(Color(0, 0, 0.04, 0.6)))
-	var plate := TextureRect.new()
-	plate.texture = _tex("plate_wide_x2")
-	plate.position = Vector2(195, 100)
-	pause_panel.add_child(plate)
-	var pl := _mk_label("ПАУЗА", Vector2(195, 112), 13, Color(1, 0.9, 0.6), HORIZONTAL_ALIGNMENT_CENTER)
-	pl.size = Vector2(90, 18)
-	pause_panel.add_child(pl)
+	pause_panel.add_child(_dim(Color(0, 0, 0.04, 0.68)))
+	var board := TextureRect.new()
+	board.texture = _tex("board_short_x2")
+	board.position = Vector2(169, 34)
+	pause_panel.add_child(board)
+	var title := _mk_label("НАСТРОЙКИ", Vector2(169, 40), 12, Color(1, 0.88, 0.4), HORIZONTAL_ALIGNMENT_CENTER)
+	title.size = Vector2(142, 16)
+	pause_panel.add_child(title)
+	_settings_rows.clear()
+	_mk_setting_row("opt_manual_aim", "Ручная стрельба (ЛКМ)", 62)
+	_mk_setting_row("opt_minimap", "Мини-карта", 80)
+	_mk_setting_row("opt_slowmo", "Слоу-мо боссов", 98)
+	_mk_setting_row("sfx", "Звуковые эффекты", 116)
+	_mk_setting_row("music", "Музыка", 134)
+	var hint := _mk_label("ESC — назад · клик или 1-5 — переключить", Vector2(0, 162), 9, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
+	hint.size = Vector2(480, 14)
+	pause_panel.add_child(hint)
 	var pi := TextureRect.new()
 	pi.texture = _tex("icon_pause_x2")
-	pi.position = Vector2(226, 134)
+	pi.position = Vector2(226, 182)
 	pause_panel.add_child(pi)
-	var pq := TextureRect.new()
-	pq.texture = _tex("icon_question_x2")
-	pq.position = Vector2(262, 134)
-	pause_panel.add_child(pq)
-	var hint := _mk_label("ESC — продолжить", Vector2(0, 172), 10, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
-	hint.size = Vector2(480, 16)
-	pause_panel.add_child(hint)
+
+## строка-переключатель настроек: [иконка] название ... ВКЛ/ВЫКЛ (кликается!)
+func _mk_setting_row(key: String, text: String, y: float) -> void:
+	var idx := _settings_rows.size()
+	var row := Control.new()
+	row.position = Vector2(177, y)
+	row.size = Vector2(126, 16)
+	pause_panel.add_child(row)
+	var bg := ColorRect.new()
+	bg.size = Vector2(126, 16)
+	bg.color = Color(1, 1, 1, 0.0)
+	row.add_child(bg)
+	var name_l := _mk_label("%d. %s" % [idx + 1, text], Vector2(2, 2), 8, Color(0.92, 0.88, 0.95))
+	name_l.size = Vector2(96, 12)
+	row.add_child(name_l)
+	var state_l := _mk_label("ВКЛ", Vector2(98, 2), 8, Color(0.55, 1, 0.55), HORIZONTAL_ALIGNMENT_CENTER)
+	state_l.size = Vector2(26, 12)
+	row.add_child(state_l)
+	row.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			_toggle_setting(idx)
+	)
+	row.mouse_entered.connect(func(): bg.color = Color(1, 1, 0.8, 0.12))
+	row.mouse_exited.connect(func(): bg.color = Color(1, 1, 1, 0.0))
+	_settings_rows.append({"key": key, "state": state_l})
+	_refresh_setting(idx)
+
+func _setting_on(idx: int) -> bool:
+	match String(_settings_rows[idx]["key"]):
+		"opt_manual_aim": return GameState.opt_manual_aim
+		"opt_minimap": return GameState.opt_minimap
+		"opt_slowmo": return GameState.opt_slowmo
+		"sfx": return SFX.enabled
+		"music": return SFX.music_enabled
+	return false
+
+func _refresh_setting(idx: int) -> void:
+	var on := _setting_on(idx)
+	var l: Label = _settings_rows[idx]["state"]
+	l.text = "ВКЛ" if on else "ВЫКЛ"
+	l.label_settings.font_color = Color(0.55, 1, 0.55) if on else Color(0.9, 0.45, 0.45)
+
+## переключить настройку: мгновенно применяется, не снимая паузу
+func _toggle_setting(idx: int) -> void:
+	match String(_settings_rows[idx]["key"]):
+		"opt_manual_aim": GameState.opt_manual_aim = not GameState.opt_manual_aim
+		"opt_minimap": GameState.opt_minimap = not GameState.opt_minimap
+		"opt_slowmo": GameState.opt_slowmo = not GameState.opt_slowmo
+		"sfx": SFX.enabled = not SFX.enabled
+		"music": SFX.set_music_enabled(not SFX.music_enabled)
+	SFX.play("click", -2.0)
+	_refresh_setting(idx)
 
 # ---------- ГЛАВНОЕ МЕНЮ (ник вводится ВНИЗУ) ----------
 # Красивости: затемнение, пульсирующий заголовок, живые факелы с аддитивным
@@ -319,7 +447,7 @@ func _build_menu() -> void:
 	board.size = Vector2(142, 178)
 	board.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu_group.add_child(board)
-	var hints := _mk_label("WASD/стрелки — движение\n1/2/3 — выбор силы\nESC — пауза\nФакелы освещают путь!", Vector2(0, 12), 9, Color(0.95, 0.9, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
+	var hints := _mk_label("WASD/стрелки — движение\nSPACE — рывок!\n1/2/3 — выбор силы\nESC — пауза, настройки", Vector2(0, 12), 9, Color(0.95, 0.9, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
 	hints.size = Vector2(142, 52)
 	menu_group.add_child(hints)
 	# поле ника — внизу доски, как просил
@@ -367,7 +495,7 @@ func _build_menu() -> void:
 	menu_hint = _mk_label("ENTER или клик — В БОЙ!", Vector2(0, 240), 10, Color(0.65, 1, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
 	menu_hint.size = Vector2(480, 16)
 	menu_panel.add_child(menu_hint)
-	var ver := _mk_label("v0.8.0", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
+	var ver := _mk_label("v0.9.0", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
 	ver.size = Vector2(472, 12)
 	menu_panel.add_child(ver)
 	# летящие искры-угольки (аддитивные — красиво светятся в темноте)
@@ -474,6 +602,32 @@ func _process(delta: float) -> void:
 	if _flash_t > 0.0:
 		_flash_t -= delta
 		flash_label.modulate.a = clampf(_flash_t, 0.0, 1.0)
+	# комбо-лесенка (растёт от 4 убийств подряд)
+	if GameState.combo >= 4 and not GameState.game_over:
+		combo_label.text = "СЕРИЯ ×%d" % GameState.combo
+		combo_label.modulate.a = 0.7 + 0.3 * sin(GameState.run_time * 8.0)
+	else:
+		combo_label.text = ""
+	# мини-карта: видна только в бою и если включена в настройках
+	var want_mm := GameState.opt_minimap and not menu_panel.visible and not gameover_panel.visible
+	if minimap.visible != want_mm:
+		minimap.visible = want_mm
+	if minimap.visible:
+		minimap.queue_redraw()
+	# стрелка к боссу, когда он за экраном
+	var bb = GameState.current_boss
+	if bb and is_instance_valid(bb) and not menu_panel.visible:
+		var scr: Vector2 = get_viewport().canvas_transform * bb.global_position
+		var on_screen := Rect2(Vector2(24, 24), Vector2(432, 222)).has_point(scr)
+		boss_arrow.visible = not on_screen
+		if not on_screen:
+			var ang := (scr - Vector2(240, 135)).angle()
+			boss_arrow.rotation = ang + PI / 2.0  # стрелка нарисована вверх
+			var cp := scr.clamp(Vector2(16, 16), Vector2(464, 254))
+			boss_arrow.position = cp - boss_arrow.pivot_offset
+			boss_arrow.modulate.a = 0.65 + 0.35 * sin(GameState.run_time * 6.0)
+	else:
+		boss_arrow.visible = false
 
 func flash(text: String, time := 2.0) -> void:
 	flash_label.text = text
@@ -510,21 +664,35 @@ func show_game_over() -> void:
 	rank.scale = Vector2.ONE * 0.65
 	gameover_panel.add_child(rank)
 	var t := int(GameState.run_time)
-	var stats := _mk_label("Время: %02d:%02d   Убийств: %d   Уровень: %d" % [floori(t / 60.0), t % 60, GameState.kills, player.level], Vector2(0, 172), 10, Color(0.95, 0.9, 0.9), HORIZONTAL_ALIGNMENT_CENTER)
-	stats.size = Vector2(480, 18)
-	gameover_panel.add_child(stats)
-	var rank_lbl := _mk_label("РАНГ: " + rank_id, Vector2(0, 190), 11, Color(1, 0.85, 0.3), HORIZONTAL_ALIGNMENT_CENTER)
-	rank_lbl.size = Vector2(480, 18)
+	# мини-статистика забега с иконками из UI-пака
+	_mk_stat_row(gameover_panel, "icon_x", "Убийств: %d · Ур: %d" % [GameState.kills, player.level], 166)
+	_mk_stat_row(gameover_panel, "icon_pause", "Время: %02d:%02d" % [floori(t / 60.0), t % 60], 180)
+	_mk_stat_row(gameover_panel, "arrow_wood", "Путь: %d м" % int(GameState.dist_traveled / 16.0), 194)
+	var fav := "Полумесяц" if GameState.slashes_used > GameState.darts_fired else "Дротики"
+	var acc := int(100.0 * GameState.shots_hit / maxf(1.0, float(GameState.darts_fired)))
+	_mk_stat_row(gameover_panel, "icon_circle", "%s · Точность %d%%" % [fav, acc], 208)
+	var rank_lbl := _mk_label("РАНГ: " + rank_id, Vector2(0, 224), 10, Color(1, 0.85, 0.3), HORIZONTAL_ALIGNMENT_CENTER)
+	rank_lbl.size = Vector2(480, 16)
 	gameover_panel.add_child(rank_lbl)
-	# плашка-подсказка
-	var chip := TextureRect.new()
-	chip.texture = _tex("plate_small")
-	chip.position = Vector2(209, 212)
-	gameover_panel.add_child(chip)
-	var hint := _mk_label("R — заново", Vector2(209, 219), 10, Color(0.55, 1, 0.55), HORIZONTAL_ALIGNMENT_CENTER)
-	hint.size = Vector2(62, 14)
+	var hint := _mk_label("R — заново", Vector2(0, 244), 10, Color(0.55, 1, 0.55), HORIZONTAL_ALIGNMENT_CENTER)
+	hint.size = Vector2(480, 14)
 	gameover_panel.add_child(hint)
 	gameover_panel.visible = true
+
+## строка статистики: иконка слева + текст (на доске смерти)
+func _mk_stat_row(panel: Control, icon_name: String, text: String, y: float) -> void:
+	var ic := TextureRect.new()
+	ic.texture = _tex(icon_name)
+	ic.position = Vector2(192, y)
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if icon_name == "arrow_wood":
+		ic.scale = Vector2.ONE * 0.3
+		ic.rotation = -PI / 2.0  # стрелка вперёд-вниз = пройденный путь
+		ic.pivot_offset = Vector2(8, 26)
+	panel.add_child(ic)
+	var l := _mk_label(text, Vector2(212, y + 2), 8, Color(0.95, 0.9, 0.9))
+	l.size = Vector2(100, 12)
+	panel.add_child(l)
 
 func show_win() -> void:
 	# наполняем доску победы
@@ -561,6 +729,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_start_game()
 		elif event.keycode == KEY_ESCAPE:
 			_toggle_pause()
+		elif pause_panel.visible and event.keycode in [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5]:
+			_toggle_setting(event.keycode - KEY_1)
 		elif levelup_panel.visible and event.keycode in [KEY_1, KEY_2, KEY_3]:
 			_pick(event.keycode - KEY_1)
 		elif gameover_panel.visible and event.keycode == KEY_R:

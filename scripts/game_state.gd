@@ -7,6 +7,21 @@ var play_rect := Rect2(50, 66, 924, 448)   # играбельная зона (к
 
 var player: Node2D = null
 var player_name := "ГЕРОЙ"   # задаётся в главном меню (живёт между рестартами)
+
+# ---------- НАСТРОЙКИ (переключаются на паузе, живут между забегами) ----------
+var opt_manual_aim := false  # ручная стрельба мышью (зажми ЛКМ и целься)
+var opt_minimap := true      # мини-карта в углу
+var opt_slowmo := true       # слоу-мо + вспышка на смерти босса
+
+# ---------- СТАТИСТИКА ЗАБЕГА (для экрана смерти, чистится в reset) ----------
+var dist_traveled := 0.0     # пройдено пикселей
+var darts_fired := 0
+var slashes_used := 0
+var shots_hit := 0           # попадания дротиками (для точности)
+
+# ---------- КОМБО (серия убийств без паузы -> звонкие монеты) ----------
+var combo := 0
+var combo_t := 0.0
 var enemies: Array = []
 var pickups: Array = []
 var breakables: Array = []   # разрушаемые ящики (crate.gd)
@@ -31,6 +46,7 @@ func _setup_input() -> void:
 		"move_right": [KEY_D, KEY_RIGHT],
 		"move_up": [KEY_W, KEY_UP],
 		"move_down": [KEY_S, KEY_DOWN],
+		"dash": [KEY_SPACE],  # рывок
 	}
 	for action in binds:
 		if not InputMap.has_action(action):
@@ -48,6 +64,7 @@ func _setup_input() -> void:
 func reset() -> void:
 	# arena/map_rect/play_rect НЕ трогаем: Arena регистрирует себя в _ready
 	# (дети сцены готовятся раньше родителя, т.е. до вызова reset из Main)
+	# player_name и настройки opt_* НЕ чистим — живут между забегами
 	player = null
 	enemies = []
 	pickups = []
@@ -58,6 +75,12 @@ func reset() -> void:
 	current_boss = null
 	game_over = false
 	won = false
+	dist_traveled = 0.0
+	darts_fired = 0
+	slashes_used = 0
+	shots_hit = 0
+	combo = 0
+	combo_t = 0.0
 
 # ---------- ДВИЖЕНИЕ С ОБХОДОМ СТЕН (коллизии по клеткам TileMap) ----------
 

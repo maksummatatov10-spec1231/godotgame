@@ -116,13 +116,13 @@ func _despawn() -> void:
 
 func _collect(pl: Node2D) -> void:
 	match kind:
-		"coin":
+		"coin":  # звон монеты растёт в тоне с твоим комбо (серия убийств)
 			pl.add_xp(1)
-			SFX.play("coin", -6.0)
+			SFX.play("coin", -6.0, minf(1.45, 1.0 + GameState.combo * 0.045))
 		"gem":
 			pl.add_xp(value)
 			FX.sparkle(global_position, 0.25)
-			SFX.play("gem", -6.0)
+			SFX.play("gem", -6.0, minf(1.35, 1.0 + GameState.combo * 0.035))
 		"elixir":
 			pl.add_xp(value)
 			FX.sparkle(global_position, 0.35)

@@ -278,6 +278,11 @@ func _process(delta: float) -> void:
 	if GameState.game_over:
 		return
 	GameState.run_time += delta
+	# комбо: серия гаснет через 2.2 сек без убийств
+	if GameState.combo_t > 0.0:
+		GameState.combo_t -= delta
+		if GameState.combo_t <= 0.0:
+			GameState.combo = 0
 	_wave_director(delta)
 	_separate_enemies()
 	# победа через 10 минут (продолжаем ва-банк под садовую музыку)
@@ -411,6 +416,8 @@ func _skull_ring() -> void:
 
 func _on_enemy_died(e: Enemy) -> void:
 	GameState.kills += 1
+	GameState.combo += 1
+	GameState.combo_t = 2.2
 	if e.is_boss:
 		_spawn_pickup("chest", e.global_position)
 		_spawn_pickup("heal_big", e.global_position + Vector2(18, 8))
@@ -418,6 +425,12 @@ func _on_enemy_died(e: Enemy) -> void:
 		if GameState.player:
 			FX.crown(GameState.player.global_position)
 		GameState.current_boss = null
+		# эффектный финал: белая вспышка + слоу-мо (таймер идёт в РЕАЛЬНОМ времени)
+		if GameState.opt_slowmo and not GameState.game_over:
+			hud.flash_screen()
+			Engine.time_scale = 0.25
+			get_tree().create_timer(0.3, true, false, true).timeout.connect(
+				func(): Engine.time_scale = 1.0)
 		if not GameState.game_over:
 			SFX.play_music(music_track)  # орган отгремел — назад к боевой теме
 		hud.flash("БОСС ПОВЕРЖЕН!", 2.0)

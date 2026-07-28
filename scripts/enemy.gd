@@ -260,7 +260,7 @@ func _ranged_shot(p: Node2D) -> void:
 			var d := global_position.direction_to(p.global_position)
 			var b := Bullet.hostile_shot("orb_violet", global_position, d, dmg)
 			get_parent().get_parent().get_node("Bullets").add_child(b)
-			SFX.play("vampire_shot", -3.0)
+			SFX.play_at("vampire_shot", global_position, -3.0)  # позиционно
 	)
 	_back_to_move_once()
 
@@ -279,13 +279,13 @@ func _comet_volley(p: Node2D) -> void:
 	)
 	_back_to_move_once()
 
-func take_damage(p_dmg: float, from_dir := Vector2.ZERO) -> void:
+func take_damage(p_dmg: float, from_dir := Vector2.ZERO, crit := false) -> void:
 	if dead:
 		return
 	hp -= p_dmg
 	_hit_flash = 0.1
 	sprite.modulate = Color(3.0, 3.0, 3.0)
-	FX.damage_number(global_position, int(p_dmg))
+	FX.damage_number(global_position, int(p_dmg), Color(1.0, 0.9, 0.3), crit)
 	if not is_boss and from_dir != Vector2.ZERO:
 		global_position = GameState.slide_move(global_position, from_dir * 5.0, 6.0)
 	if hp <= 0.0:
@@ -303,9 +303,9 @@ func die() -> void:
 	if is_boss:
 		SFX.play("boss_die", -1.0)
 	elif elite:
-		SFX.play("elite_die", -2.0)
+		SFX.play_at("elite_die", global_position, -2.0)  # позиционно: вдали — тише
 	else:
-		SFX.play("enemy_die", -4.0, 0.92)
+		SFX.play_at("enemy_die", global_position, -4.0, 0.92)
 	var fx_scale := 0.45
 	if type_name == "goblin":
 		FX.splatter(global_position, true)

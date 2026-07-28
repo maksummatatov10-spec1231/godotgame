@@ -34,6 +34,7 @@ var nick_label: Label
 var outline_mat: ShaderMaterial
 var _t_dart := 0.4
 var _t_slash := 0.0
+var _dash_cd := 0.0
 var _iframes := 0.0
 var _regen_acc := 0.0
 var _walk_t := 0.0
@@ -113,7 +114,9 @@ func _process(delta: float) -> void:
 		Input.get_action_strength("move_down") - Input.get_action_strength("move_up"))
 	if dir.length() > 0.0:
 		dir = dir.normalized()
+		var before := global_position
 		global_position = GameState.slide_move(global_position, dir * speed * delta, 6.0)
+		GameState.dist_traveled += global_position.distance_to(before)
 		sprite.flip_h = dir.x < 0.0
 		sprite.speed_scale = 2.6   # быстрый переступ двух кадров = "шагаем"
 		# процедурная "ходьба": покачивание, присяд в такт, наклон (в паках нет walk-кадров героя)
@@ -136,6 +139,24 @@ func _process(delta: float) -> void:
 		sprite.scale = sprite.scale.lerp(Vector2.ONE, delta * 10.0)
 		sprite.position.y = lerpf(sprite.position.y, 0.0, delta * 10.0)
 		sprite.rotation = lerpf(sprite.rotation, 0.0, delta * 10.0)
+	# ДЭШ (Space): короткий рывок с неуязвимостью и дымом
+	_dash_cd -= delta
+	if _dash_cd <= 0.0 and Input.is_action_just_pressed("dash"):
+		var dd := dir if dir.length() > 0.0 else (Vector2.LEFT if sprite.flip_h else Vector2.RIGHT)
+		_dash_cd = 1.2
+		_iframes = maxf(_iframes, 0.35)
+		FX.smoke(global_position, 0.35, 22)
+		SFX.play("dash", -2.0)
+		var rest := 52.0
+		while rest > 0.0:  # короткими шагами — чтобы не пролезть сквозь стену
+			var np := GameState.slide_move(global_position, dd * minf(8.0, rest), 6.0)
+			if np == global_position:
+				break
+			GameState.dist_traveled += global_position.distance_to(np)
+			global_position = np
+			rest -= 8.0
+		FX.smoke(global_position, 0.3, 22)
+		FX.sparkle(global_position, 0.25)
 	# реген
 	if regen > 0.0:
 		_regen_acc += regen * delta
@@ -147,22 +168,38 @@ func _process(delta: float) -> void:
 		sprite.modulate.a = 0.45 + 0.3 * sin(_iframes * 40.0)
 	else:
 		sprite.modulate.a = 1.0
-	# авто-атака дротиками
+	# атака дротиками: авто-наведение ИЛИ ручная стрельба мышью (настройка на паузе)
 	_t_dart -= delta
 	if _t_dart <= 0.0:
-		var target := _nearest_enemy(600.0)
-		if target:
-			_fire_darts(target)
-			_t_dart = dart_cd
+		if GameState.opt_manual_aim:
+			if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):  # зажми ЛКМ — стреляй в курсор
+				var mpos := get_global_mouse_position()
+				if mpos.distance_to(global_position) > 4.0:
+					_fire_darts_dir(global_position.direction_to(mpos))
+					_t_dart = dart_cd
+				else:
+					_t_dart = 0.12
+			else:
+				_t_dart = 0.12
 		else:
-			_t_dart = 0.15
+			var target := _nearest_enemy(600.0)
+			if target:
+				_fire_darts(target)
+				_t_dart = dart_cd
+			else:
+				_t_dart = 0.15
 	# огненный полумесяц по ближним
 	_t_slash -= delta
 	if _t_slash <= 0.0:
 		var near := _nearest_enemy(slash_radius + 26.0)
 		if near:
-			var ndir := global_position.direction_to(near.global_position)
-			sprite.flip_h = near.global_position.x < global_position.x
+			var ndir: Vector2
+			if GameState.opt_manual_aim:  # полумесяц бьёт в сторону курсора
+				var mpos2 := get_global_mouse_position()
+				ndir = global_position.direction_to(mpos2) if mpos2.distance_to(global_position) > 4.0 else global_position.direction_to(near.global_position)
+			else:
+				ndir = global_position.direction_to(near.global_position)
+			sprite.flip_h = ndir.x < 0.0
 			# микровыпад в сторону цели — читается как анимация атаки
 			global_position = GameState.slide_move(global_position, ndir * 7.0, 6.0)
 			var tw := body.create_tween()
@@ -170,6 +207,7 @@ func _process(delta: float) -> void:
 			tw.tween_property(body, "scale", Vector2.ONE, 0.16)
 			FX.sparkle(global_position + ndir * slash_radius * 0.5, 0.2)
 			SFX.play("slash", -6.0)
+			GameState.slashes_used += 1
 			Slash.strike(self, global_position, ndir, slash_radius, slash_dmg, slash_tier)
 			_t_slash = slash_cd
 		else:
@@ -188,9 +226,12 @@ func _nearest_enemy(max_dist: float) -> Node2D:
 	return best
 
 func _fire_darts(target: Node2D) -> void:
-	var base_dir := global_position.direction_to(target.global_position)
+	_fire_darts_dir(global_position.direction_to(target.global_position))
+
+## залп дротиков по направлению (общее ядро: авто-наведение и ручная стрельба)
+func _fire_darts_dir(base_dir: Vector2) -> void:
 	# герой всегда лицом к цели атаки (не "задом")
-	sprite.flip_h = target.global_position.x < global_position.x
+	sprite.flip_h = base_dir.x < 0.0
 	FX.cast(global_position + Vector2(0, -3))
 	SFX.play("shoot", -8.0)
 	# вспышка "руки": искра в точке вылета снаряда
@@ -204,6 +245,7 @@ func _fire_darts(target: Node2D) -> void:
 	var fw := sprite.create_tween()
 	fw.tween_property(sprite, "modulate", Color.WHITE, 0.18)
 	var n := dart_count
+	GameState.darts_fired += n
 	for i in range(n):
 		var spread := (i - (n - 1) / 2.0) * 0.13
 		var d := base_dir.rotated(spread)
@@ -218,6 +260,8 @@ func take_damage(dmg: float) -> void:
 		return
 	hp -= dmg
 	_iframes = 0.55
+	GameState.combo = 0      # серия сгорела — ранение сбрасывает комбо
+	GameState.combo_t = 0.0
 	SFX.play("player_hurt", -2.0)
 	sprite.modulate = Color(3.0, 0.6, 0.6)
 	var t := Timer.new()

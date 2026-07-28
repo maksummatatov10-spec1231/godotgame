@@ -68,7 +68,7 @@ func _open(arena: TileMapLayer, world: Vector2) -> void:
 	arena.set_cell(cell, 0, DEBRIS.get(closed_tile, Vector2i(5, 1)))
 	GameState.closed_doors.erase(cell)
 	if _by_enemy:
-		SFX.play("doorbreak", 0.0)   # враг выломал — грохот крошки дерева
+		SFX.play_at("doorbreak", world, 0.0)   # грохот позиционный: вдали — тихий
 	else:
 		SFX.play("hit", -4.0, 0.7)
 	FX.smoke(world + Vector2(0, -2), 0.45, 30)

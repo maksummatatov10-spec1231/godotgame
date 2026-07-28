@@ -33,16 +33,16 @@ static func smoke(pos: Vector2, scale := 0.5, z := 60) -> void: spawn("assets/ef
 static func cast(pos: Vector2) -> void: spawn("assets/bullets/cast", pos, 14.0, 0.8, 15)
 
 # всплывающие цифры урона/лечения
-static func damage_number(pos: Vector2, amount: int, color := Color(1.0, 0.9, 0.3)) -> void:
+static func damage_number(pos: Vector2, amount: int, color := Color(1.0, 0.9, 0.3), crit := false) -> void:
 	if effects_root == null:
 		return
 	var l := Label.new()
 	l.text = str(amount)
 	l.z_index = 80
 	var ls := LabelSettings.new()
-	ls.font_size = 9
-	ls.font_color = color
-	ls.outline_size = 2
+	ls.font_size = 13 if crit else 9
+	ls.font_color = Color(1.0, 0.45, 0.85) if crit else color  # крит — ярко-розовый и крупный
+	ls.outline_size = 3 if crit else 2
 	ls.outline_color = Color(0.1, 0.0, 0.1)
 	l.label_settings = ls
 	l.global_position = pos + Vector2(randf_range(-6.0, 6.0), -14.0)
