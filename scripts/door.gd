@@ -22,6 +22,7 @@ var cell := Vector2i.ZERO
 var closed_tile := Vector2i(6, 2)
 var _stage := 0                 # 0 закрыта, 1 трещит, 2 вскрыта
 var _t := 0.0
+var _by_enemy := false          # дверь выломал враг (а не открыл герой)
 
 static func register(cell_pos: Vector2i, tile: Vector2i) -> Door:
 	var d := Door.new()
@@ -43,10 +44,12 @@ func _process(delta: float) -> void:
 	var p := GameState.player
 	if p and is_instance_valid(p) and p.global_position.distance_to(world) < OPEN_RADIUS:
 		rate = 1.0
+		_by_enemy = false
 	else:
 		for e in GameState.enemies:
 			if is_instance_valid(e) and not e.dead and e.global_position.distance_to(world) < OPEN_RADIUS - 4.0:
 				rate = 1.0 / ENEMY_SLOW
+				_by_enemy = true
 				break
 	if rate <= 0.0:
 		_t = maxf(0.0, _t - delta * 0.5)  # отошли — трещина "заживает"
@@ -64,7 +67,10 @@ func _open(arena: TileMapLayer, world: Vector2) -> void:
 	_stage = 2
 	arena.set_cell(cell, 0, DEBRIS.get(closed_tile, Vector2i(5, 1)))
 	GameState.closed_doors.erase(cell)
-	SFX.play("hit", -4.0, 0.7)
+	if _by_enemy:
+		SFX.play("doorbreak", 0.0)   # враг выломал — грохот крошки дерева
+	else:
+		SFX.play("hit", -4.0, 0.7)
 	FX.smoke(world + Vector2(0, -2), 0.45, 30)
 	FX.sparkle(world, 0.3)
 	queue_free()

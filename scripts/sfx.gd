@@ -11,6 +11,8 @@ const EXT := [".wav", ".mp3", ".ogg"]
 
 # базовая громкость (dB) — подобрана по измеренной громкости файлов:
 # частые звуки тише, редкие и важные — заметнее.
+# Ключ — имя звука ИЛИ конкретного файла-варианта (вариант важнее базы):
+# "spawn": -14 действует на spawn/spawn_2, а "spawn_3": 24 — только на третий файл.
 const LEVELS := {
 	"shoot": -7.0,        # лазерные выстрелы громкие — придержать
 	"slash": 10.0,        # мечи записаны тихо — поднять
@@ -19,26 +21,46 @@ const LEVELS := {
 	"elite_die": 5.0,
 	"player_hurt": 9.0,
 	"player_die": 11.0,
+	"player_die_2": 14.0, # смерть-призрак (Hel Circle) тише записью
 	"coin": -8.0,         # монеты звенят часто
+	"coin_5": -1.0,       # монета JDSherbert записана тише остальных
 	"gem": -8.0,
 	"flask": -13.0,       # Can_Open очень громкий
+	"resurrect": 10.0,    # большой жёлтый флакон — хор воскрешения
 	"key": -8.0,
 	"chest": 16.0,        # сундуки записаны очень тихо
 	"crate": 16.0,
+	"crate_3": -8.0,      # Box Break громкий — придержать
 	"levelup": -2.0,
 	"boss": -4.0,
 	"boss_die": -2.0,
 	"gameover": -4.0,
 	"win": -4.0,
 	"click": -10.0,
+	"click_3": -6.0,      # переключатель чуть громче блипов
 	"spike": -4.0,
 	"door": -2.0,
+	"door_3": 24.0,       # скрип двери (Hel Circle) записан почти неслышно
+	"doorbreak": 22.0,    # враг выломал дверь — крошка дерева
 	"spawn": -14.0,       # телепорт громкий + спавнится много врагов
+	"spawn_3": 24.0,      # мистический телепорт элиток очень тихий
+	"spawn_4": -9.0,
+	"spawn_5": -2.0,
 	"step": 24.0,         # шаги почти неслышны в записи
+	"step_4": 24.0,
 	"vampire_shot": -12.0,
 	"comet_hit": -6.0,
 }
 const MUSIC_DB := -14.0
+# подстройка каждого трека относительно MUSIC_DB (по измеренной громкости,
+# чтобы все треки звучали одинаково приятно)
+const MUSIC_LEVELS := {
+	"music_main": 0.0,    # haunted — эталон
+	"music_menu": 2.0,    # mystery чуть тише записи — поднять
+	"music_boss": 5.0,    # eglise_orgue — орган записан тише
+	"music_tuto": 5.0,    # cave_tuto
+	"music_win": 7.0,     # jardins самый тихий
+}
 
 static var _pool: Array = []
 static var _idx := 0
@@ -68,6 +90,7 @@ static func attach(root: Node) -> void:
 	_music.volume_db = MUSIC_DB
 	root.add_child(_music)
 
+## варианты звука: список пар [имя_файла, поток]
 static func _variants(sname: String) -> Array:
 	if _variants_cache.has(sname):
 		return _variants_cache[sname]
@@ -76,12 +99,12 @@ static func _variants(sname: String) -> Array:
 		for ext in EXT:
 			var path := SFX_DIR + sname + suffix + ext
 			if ResourceLoader.exists(path):
-				list.append(load(path))
+				list.append([sname + suffix, load(path)])
 				break
 	_variants_cache[sname] = list
 	return list
 
-## проиграть эффект: громкость = LEVELS[звук] + vol, вариация — случайная
+## проиграть эффект: громкость = LEVELS[вариант или звук] + vol, вариация — случайная
 static func play(sname: String, vol := 0.0, pitch := 1.0) -> void:
 	if not enabled:
 		return
@@ -91,8 +114,9 @@ static func play(sname: String, vol := 0.0, pitch := 1.0) -> void:
 		return
 	var p: AudioStreamPlayer = _pool[_idx]
 	_idx = (_idx + 1) % _pool.size()
-	p.stream = list[randi() % list.size()]
-	p.volume_db = float(LEVELS.get(sname, 0.0)) + vol
+	var entry: Array = list[randi() % list.size()]
+	p.stream = entry[1]
+	p.volume_db = float(LEVELS.get(entry[0], LEVELS.get(sname, 0.0))) + vol
 	p.pitch_scale = pitch * randf_range(0.94, 1.06)
 	p.play()
 
@@ -100,7 +124,7 @@ static func play_music(sname: String) -> void:
 	var list: Array = _variants(sname)
 	if list.is_empty() or _music == null:
 		return
-	var stream: AudioStream = list[0]
+	var stream: AudioStream = list[0][1]
 	if stream is AudioStreamWAV:
 		# бесшовный луп: от начала до конца файла
 		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
@@ -110,7 +134,7 @@ static func play_music(sname: String) -> void:
 	elif "loop" in stream:
 		stream.loop = true
 	_music.stream = stream
-	_music.volume_db = MUSIC_DB
+	_music.volume_db = MUSIC_DB + float(MUSIC_LEVELS.get(sname, 0.0))
 	_music.play()
 
 static func music_off() -> void:

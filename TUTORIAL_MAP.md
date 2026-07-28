@@ -177,17 +177,20 @@
 Все звуки — `assets/sfx/` (wav/mp3), собраны из 5 бесплатных паков, громкость каждого
 отбалансирована вручную (таблица `LEVELS` в `scripts/sfx.gd`: минус = тише, плюс = громче).
 Хочешь свои — **просто замени файлы с теми же именами**, код трогать не надо:
-`shoot slash hit enemy_die elite_die player_hurt player_die coin gem flask key chest crate
-levelup boss boss_die gameover win click spike door spawn step vampire_shot comet_hit`.
+`shoot slash hit enemy_die elite_die player_hurt player_die coin gem flask resurrect key chest
+crate levelup boss boss_die gameover win click spike door doorbreak spawn step vampire_shot comet_hit`.
 
 Фишки звукового движка (`scripts/sfx.gd`):
-- **Варианты**: к имени можно добавить `_2`, `_3` … (`coin.wav`, `coin_2.wav`…) —
+- **Варианты**: к имени можно добавить `_2` … `_5` (`coin.wav`, `coin_2.wav`… до `coin_5.wav`) —
   при каждом проигрывании выбирается случайный вариант, звук не приедается.
-- **Музыка зациклена**: `music_main.mp3` (бой, из пака Hel Circle) и `music_menu.mp3`
-  (меню). Для wav луп включается через `loop_mode = LOOP_FORWARD`, для mp3/ogg —
-  свойством `loop = true` (код уже делает это сам).
-- Громкость музыки — константа `MUSIC_DB` в `sfx.gd`, у каждого звука ±6% случайной
-  высоты тона для живости.
+  У отдельного варианта может быть СВОЯ громкость: запись в `LEVELS` с полным именем
+  (`"coin_5": -1.0`) перекрывает базовую (`"coin": -8.0`).
+- **Музыка зациклена**: `music_menu.mp3` (меню), `music_main.mp3` (бой),
+  `music_boss.mp3` (орган на весь бой с боссом!), `music_tuto.mp3` (обучающая сцена),
+  `music_win.mp3` (сады после победы). У каждого трека своя громкость — `MUSIC_LEVELS`
+  поверх базовой `MUSIC_DB`. Для wav луп включается через `loop_mode = LOOP_FORWARD`,
+  для mp3/ogg — свойством `loop = true` (код уже делает это сам).
+- У каждого звука ±6% случайной высоты тона для живости.
 
 ---
 

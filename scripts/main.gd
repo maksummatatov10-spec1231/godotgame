@@ -19,6 +19,7 @@ extends Node2D
 
 var player: Player
 var hud
+var music_track := "music_main"   # боевой трек этой сцены (у demo_map — music_tuto)
 var enemies_node: Node2D
 var bullets_node: Node2D
 var pickups_node: Node2D
@@ -108,7 +109,11 @@ func _decor_with_light(anim_path: String, pos: Vector2) -> AnimatedSprite2D:
 
 func _ready() -> void:
 	GameState.reset()
-	SFX.attach(self)  # звуки и музыка (assets/sfx/*.wav)
+	SFX.attach(self)  # звуки и музыка (assets/sfx)
+	# обучающая сцена (demo_map.tscn) идёт под свою спокойную музыку
+	var scn := get_tree().current_scene
+	if scn and scn.scene_file_path.ends_with("demo_map.tscn"):
+		music_track = "music_tuto"
 	# контейнеры по z-порядку
 	decor_node = _mk("Decor", 0, 2)
 	pickups_node = _mk("Pickups", 0, 4)
@@ -275,10 +280,11 @@ func _process(delta: float) -> void:
 	GameState.run_time += delta
 	_wave_director(delta)
 	_separate_enemies()
-	# победа через 10 минут (продолжаем ва-банк)
+	# победа через 10 минут (продолжаем ва-банк под садовую музыку)
 	if not GameState.won and GameState.run_time >= Data.WIN_TIME:
 		GameState.won = true
 		SFX.play("win", -1.0)
+		SFX.play_music("music_win")
 		hud.show_win()
 
 # ---------------- СПАВН ----------------
@@ -380,6 +386,7 @@ func _spawn_boss(type: String, hp_mult: float) -> void:
 	b.died.connect(_on_enemy_died)
 	FX.smoke_skull(b.global_position, 1.2)
 	SFX.play("boss", -1.0)
+	SFX.play_music("music_boss")  # эксклюзив: орган на всё сражение!
 	hud.flash("БОСС: %s!" % Data.BOSSES[type]["title"], 2.2)
 
 func _spawn_pickup(kind: String, pos := Vector2.ZERO) -> void:
@@ -411,6 +418,8 @@ func _on_enemy_died(e: Enemy) -> void:
 		if GameState.player:
 			FX.crown(GameState.player.global_position)
 		GameState.current_boss = null
+		if not GameState.game_over:
+			SFX.play_music(music_track)  # орган отгремел — назад к боевой теме
 		hud.flash("БОСС ПОВЕРЖЕН!", 2.0)
 		return
 	# дроп: монеты, флаконы, ключи — падают из врагов

@@ -336,7 +336,7 @@ func _start_game() -> void:
 	menu_panel.visible = false
 	get_tree().paused = false
 	SFX.play("click", -2.0)
-	SFX.play_music("music_main")
+	SFX.play_music(main.music_track)  # у обучалки — своя тема
 	flash("ВЫЖИВИ 10 МИНУТ, %s!" % GameState.player_name, 2.8)
 
 # ---------- ЛОГИКА ----------

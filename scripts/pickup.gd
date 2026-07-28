@@ -132,9 +132,12 @@ func _collect(pl: Node2D) -> void:
 			FX.sparkle(global_position, 0.4)
 			FX.coin_burst(global_position, 0.25)
 			SFX.play("key", -4.0, 1.1 if kind == "key_gold" else 1.0)
-		"heal", "heal_big":
+		"heal":
 			pl.heal(float(value))
-			SFX.play("flask", -4.0, 1.1 if kind == "heal_big" else 1.0)
+			SFX.play("flask", -4.0)
+		"heal_big":  # большой жёлтый — почти воскрешение (хор из Hel Circle)
+			pl.heal(float(value))
+			SFX.play("resurrect", 0.0)
 	GameState.pickups.erase(self)
 	queue_free()
 
