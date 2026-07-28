@@ -1,0 +1,14 @@
+# Godot 4 генерируемые файлы
+.godot/
+imported/
+*.translation
+
+# Экспорт-сборки
+builds/
+*.pck
+*.exe
+*.apk
+
+# ОС
+.DS_Store
+Thumbs.db
