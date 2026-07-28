@@ -10,10 +10,10 @@ var _flying := false
 var _opened := false
 var _bob_t := 0.0
 
-static func spawn(kind_: String, pos: Vector2) -> Pickup:
+static func spawn(kind_name: String, pos: Vector2) -> Pickup:
 	var p := Pickup.new()
-	p.kind = kind_
-	match kind_:
+	p.kind = kind_name
+	match kind_name:
 		"coin":
 			p.value = 1
 			p.sprite = AnimLib.sprite("assets/items/coin", 8.0, true)

@@ -111,7 +111,7 @@ func _process(delta: float) -> void:
 				_lunge_cd = cfg["lunge"]["cd"]
 			_touch_damage()
 			return
-		elif _lunge_cd <= 0.0 and dist < 220.0 and dist > 60.0:
+		if _lunge_cd <= 0.0 and dist < 220.0 and dist > 60.0:
 			_lunge_t = cfg["lunge"]["time"]
 			FX.smoke(global_position, 0.5)
 			return

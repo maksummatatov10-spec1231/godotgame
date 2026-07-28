@@ -36,10 +36,15 @@ func score() -> int:
 
 func rank() -> String:
 	var s := score()
-	if won and s >= 500: return "S"
-	if s >= 650: return "S"
-	if s >= 450: return "A"
-	if s >= 300: return "B"
-	if s >= 180: return "C"
-	if s >= 80: return "D"
-	return "F"
+	var r := "F"
+	if s >= 650 or (won and s >= 500):
+		r = "S"
+	elif s >= 450:
+		r = "A"
+	elif s >= 300:
+		r = "B"
+	elif s >= 180:
+		r = "C"
+	elif s >= 80:
+		r = "D"
+	return r
