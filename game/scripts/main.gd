@@ -142,7 +142,7 @@ func _wave_director(delta: float) -> void:
 			_spawn_boss(bs["type"], bs["hp_mult"])
 
 func _pick_type(t: float) -> String:
-	var table := Data.WAVE_TABLE[0][1]
+	var table: Array = Data.WAVE_TABLE[0][1]
 	for row in Data.WAVE_TABLE:
 		if t >= row[0]:
 			table = row[1]

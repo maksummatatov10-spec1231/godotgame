@@ -6,7 +6,7 @@ extends Node2D
 var dmg := 16.0
 var radius := 46.0
 
-static func strike(owner: Node, pos: Vector2, dir: Vector2, p_radius: float, p_dmg: float, tier: int) -> Slash:
+static func strike(caller: Node, pos: Vector2, dir: Vector2, p_radius: float, p_dmg: float, tier: int) -> Slash:
 	var s := Slash.new()
 	s.dmg = p_dmg
 	s.radius = p_radius
@@ -24,7 +24,7 @@ static func strike(owner: Node, pos: Vector2, dir: Vector2, p_radius: float, p_d
 		if to_e.length() < p_radius + 20.0 and to_e.normalized().dot(dir) > 0.2:
 			e.take_damage(p_dmg, dir)
 	FX.spawn("assets/effects/impact_yellow", pos + dir * (p_radius * 0.5), 18.0, 0.3)
-	owner.get_parent().get_node("Effects").add_child(s)
+	caller.get_parent().get_node("Effects").add_child(s)
 	return s
 
 func _ready() -> void:

@@ -103,12 +103,13 @@ func _process(delta: float) -> void:
 
 	# рывок кровавой твари
 	if cfg.has("lunge"):
+		var speed_val: float = cfg["speed"]
 		_lunge_cd -= delta
 		if _lunge_t > 0.0:
 			_lunge_t -= delta
-			global_position = GameState.clamp_to_arena(global_position + dir * cfg["speed"] * cfg["lunge"]["speed_mult"] * delta, 10.0)
+			global_position = GameState.clamp_to_arena(global_position + dir * speed_val * float(cfg["lunge"]["speed_mult"]) * delta, 10.0)
 			if _lunge_t <= 0.0:
-				_lunge_cd = cfg["lunge"]["cd"]
+				_lunge_cd = float(cfg["lunge"]["cd"])
 			_touch_damage()
 			return
 		if _lunge_cd <= 0.0 and dist < 220.0 and dist > 60.0:
@@ -130,7 +131,8 @@ func _process(delta: float) -> void:
 	if dist < cfg["attack_range"] + 4.0:
 		_touch_damage()
 	elif not _attacking:
-		var step := dir * cfg["speed"] * delta
+		var speed_val: float = cfg["speed"]
+		var step: Vector2 = dir * speed_val * delta
 		if cfg.get("wobble", false):
 			_wobble_t += delta * 6.0
 			step += dir.rotated(PI / 2.0) * sin(_wobble_t) * 36.0 * delta
@@ -147,7 +149,7 @@ func _touch_damage() -> void:
 		return
 	_attacking = true
 	_play("attack_anim")
-	var dmg_delay := 0.45 if is_boss else 0.35
+	var dmg_delay: float = 0.45 if is_boss else 0.35
 	get_tree().create_timer(dmg_delay, false).timeout.connect(func():
 		if is_instance_valid(self) and not dead and is_instance_valid(p):
 			if global_position.distance_to(p.global_position) < cfg["attack_range"] + 12.0:
