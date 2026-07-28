@@ -22,7 +22,15 @@ var gameover_panel: Control
 var win_panel: Control
 var pause_panel: Control
 var menu_panel: Control
+var menu_title: Label
+var menu_sub: Label
+var menu_group: Control     # висячая доска с ником и кнопкой (покачивается)
+var menu_hint: Label
+var menu_glows := []        # аддитивные свечения факелов
+var embers: CPUParticles2D  # летящие искры
 var nick_edit: LineEdit
+var _menu_t := 0.0
+var _menu_intro := 0.0      # идёт анимация появления меню
 var _cards := []
 var _pending_upgrades := []
 var _paused := false
@@ -262,34 +270,65 @@ func _build_pause() -> void:
 	pause_panel.add_child(hint)
 
 # ---------- ГЛАВНОЕ МЕНЮ (ник вводится ВНИЗУ) ----------
+# Красивости: затемнение, пульсирующий заголовок, живые факелы с аддитивным
+# свечением, качающаяся висячая доска, летящие искры (светятся в режиме ADD),
+# каскадное появление элементов твинами.
+
+## аддитивное свечение из мягкого радиального градиента (текстура света факелов)
+func _mk_glow(pos: Vector2, size: float, color: Color) -> TextureRect:
+	var g := TextureRect.new()
+	g.texture = load("res://assets/fx/light_warm.png")
+	g.position = pos
+	g.size = Vector2(size, size)
+	g.modulate = color
+	var cm := CanvasItemMaterial.new()
+	cm.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	g.material = cm
+	g.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu_glows.append(g)
+	return g
 
 func _build_menu() -> void:
 	menu_panel = Control.new()
 	menu_panel.visible = false
 	add_child(menu_panel)
-	var dim := _dim(Color(0.02, 0.01, 0.06, 0.97))
-	menu_panel.add_child(dim)
-	var title := _mk_label("DUNGEON SURVIVORS", Vector2(0, 26), 19, Color(1, 0.72, 0.25), HORIZONTAL_ALIGNMENT_CENTER)
-	title.size = Vector2(480, 26)
-	menu_panel.add_child(title)
-	var sub := _mk_label("пиксельный данжен-survivor · Godot 4.3", Vector2(0, 52), 9, Color(0.75, 0.7, 0.85), HORIZONTAL_ALIGNMENT_CENTER)
-	sub.size = Vector2(480, 14)
-	menu_panel.add_child(sub)
-	# висячая доска с подсказками
+	menu_panel.add_child(_dim(Color(0.02, 0.01, 0.06, 0.92)))
+	# живые факелы по бокам + мягкое свечение (аддитив)
+	for tx in [52.0, 428.0]:
+		var glow := _mk_glow(Vector2(tx - 40, 20), 80.0, Color(1, 0.6, 0.28, 0.5))
+		menu_panel.add_child(glow)
+		var torch := AnimLib.sprite("assets/items/torch", 6.0, true)
+		torch.position = Vector2(tx, 56)
+		torch.scale = Vector2.ONE * 2.0
+		menu_panel.add_child(torch)
+	# заголовок-маяк
+	menu_title = _mk_label("DUNGEON SURVIVORS", Vector2(0, 16), 20, Color(1, 0.75, 0.3), HORIZONTAL_ALIGNMENT_CENTER)
+	menu_title.size = Vector2(480, 26)
+	menu_panel.add_child(menu_title)
+	menu_sub = _mk_label("пиксельный данжен-survivor · Godot 4.3", Vector2(0, 42), 9, Color(0.78, 0.72, 0.88), HORIZONTAL_ALIGNMENT_CENTER)
+	menu_sub.size = Vector2(480, 14)
+	menu_panel.add_child(menu_sub)
+	# висячая доска-группа (качается как табличка на цепях): подсказки, ник, кнопка
+	menu_group = Control.new()
+	menu_group.position = Vector2(169, 52)
+	menu_group.size = Vector2(142, 178)
+	menu_group.pivot_offset = Vector2(71, 0)
+	menu_panel.add_child(menu_group)
 	var board := TextureRect.new()
-	board.texture = _tex("board_tall_x2")
-	board.position = Vector2(169, 66)
-	menu_panel.add_child(board)
-	var hints := _mk_label("WASD/стрелки — движение\n1/2/3 — выбор силы\nESC — пауза\nДвери вскрываются сблизи!", Vector2(0, 118), 9, Color(0.95, 0.9, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
-	hints.size = Vector2(480, 60)
-	menu_panel.add_child(hints)
-	# поле ника ВНИЗУ экрана
-	var nick_lbl := _mk_label("НИК ГЕРОЯ (виден над головой):", Vector2(0, 196), 8, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
-	nick_lbl.size = Vector2(480, 12)
-	menu_panel.add_child(nick_lbl)
+	board.texture = _tex("board_short_x2")
+	board.size = Vector2(142, 178)
+	board.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu_group.add_child(board)
+	var hints := _mk_label("WASD/стрелки — движение\n1/2/3 — выбор силы\nESC — пауза\nФакелы освещают путь!", Vector2(0, 12), 9, Color(0.95, 0.9, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
+	hints.size = Vector2(142, 52)
+	menu_group.add_child(hints)
+	# поле ника — внизу доски, как просил
+	var nick_lbl := _mk_label("НИК ГЕРОЯ (над головой):", Vector2(0, 68), 8, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
+	nick_lbl.size = Vector2(142, 12)
+	menu_group.add_child(nick_lbl)
 	nick_edit = LineEdit.new()
-	nick_edit.position = Vector2(170, 210)
-	nick_edit.size = Vector2(140, 20)
+	nick_edit.position = Vector2(13, 82)
+	nick_edit.size = Vector2(116, 20)
 	nick_edit.max_length = 14
 	nick_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	nick_edit.placeholder_text = "ГЕРОЙ"
@@ -304,16 +343,18 @@ func _build_menu() -> void:
 	nick_edit.add_theme_font_size_override("font_size", 10)
 	nick_edit.add_theme_color_override("font_color", Color(0.9, 1, 1))
 	nick_edit.text_submitted.connect(func(_t: String): _start_game())
-	menu_panel.add_child(nick_edit)
-	# кнопка ИГРАТЬ на деревянной плашке
+	menu_group.add_child(nick_edit)
+	# кнопка ИГРАТЬ на деревянной плашке в самом низу доски
 	var btn := Control.new()
-	btn.position = Vector2(195, 236)
-	btn.size = Vector2(90, 30)
+	btn.position = Vector2(26, 112)
+	btn.size = Vector2(90, 58)
+	menu_group.add_child(btn)
 	var bpl := TextureRect.new()
 	bpl.texture = _tex("plate_wide_x2")
 	bpl.size = Vector2(90, 58)
+	bpl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(bpl)
-	var bl := _mk_label("ИГРАТЬ", Vector2(0, 6), 13, Color(1, 0.9, 0.5), HORIZONTAL_ALIGNMENT_CENTER)
+	var bl := _mk_label("ИГРАТЬ", Vector2(0, 14), 13, Color(1, 0.9, 0.5), HORIZONTAL_ALIGNMENT_CENTER)
 	bl.size = Vector2(90, 20)
 	btn.add_child(bl)
 	btn.gui_input.connect(func(ev: InputEvent):
@@ -322,13 +363,83 @@ func _build_menu() -> void:
 	)
 	btn.mouse_entered.connect(func(): bl.label_settings.font_color = Color(0.6, 1, 0.6))
 	btn.mouse_exited.connect(func(): bl.label_settings.font_color = Color(1, 0.9, 0.5))
-	menu_panel.add_child(btn)
+	# мигающая подсказка под доской
+	menu_hint = _mk_label("ENTER или клик — В БОЙ!", Vector2(0, 240), 10, Color(0.65, 1, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
+	menu_hint.size = Vector2(480, 16)
+	menu_panel.add_child(menu_hint)
+	var ver := _mk_label("v0.8.0", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
+	ver.size = Vector2(472, 12)
+	menu_panel.add_child(ver)
+	# летящие искры-угольки (аддитивные — красиво светятся в темноте)
+	embers = CPUParticles2D.new()
+	embers.amount = 28
+	embers.lifetime = 6.0
+	embers.preprocess = 6.0  # меню открывается — искры уже летают!
+	embers.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	embers.emission_rect_extents = Vector2(250, 4)
+	embers.position = Vector2(240, 278)
+	embers.direction = Vector2(0, -1)
+	embers.spread = 35.0
+	embers.gravity = Vector2(0, -3.5)
+	embers.initial_velocity_min = 4.0
+	embers.initial_velocity_max = 11.0
+	embers.scale_amount_min = 0.04
+	embers.scale_amount_max = 0.1
+	embers.texture = load("res://assets/fx/light_warm.png")
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0, 0, 0, 0))   # рождение — прозрачно
+	grad.set_color(1, Color(0, 0, 0, 0))   # смерть — растворяется
+	grad.add_point(0.25, Color(1, 0.6, 0.25, 0.75))  # яркая серединка жизни искры
+	embers.color_ramp = grad
+	var ecm := CanvasItemMaterial.new()
+	ecm.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	embers.material = ecm
+	menu_panel.add_child(embers)
+
+## непрерывная анимация меню (вызывается из _process, пока меню видно)
+func _menu_animate(delta: float) -> void:
+	_menu_t += delta
+	if _menu_intro > 0.0:
+		_menu_intro = maxf(0.0, _menu_intro - delta)
+		return  # идёт каскадное появление — твины сами всё двигают
+	var t := _menu_t
+	# заголовок дышит и переливается золотом
+	menu_title.position.y = 16 + sin(t * 1.3) * 2.0
+	menu_title.label_settings.font_color = Color(1.0, 0.72 + 0.14 * sin(t * 2.1), 0.28 + 0.1 * sin(t * 2.1))
+	# доска покачивается на цепях
+	menu_group.rotation = sin(t * 0.8) * 0.012
+	# свечения факелов мерцают (в такт мерцающим факелам мира)
+	for i in range(menu_glows.size()):
+		var g: TextureRect = menu_glows[i]
+		g.modulate.a = 0.42 + 0.1 * sin(t * 9.0 + i * 2.6) + 0.05 * sin(t * 23.0 + i)
+	# подсказка дышит
+	menu_hint.modulate.a = 0.55 + 0.45 * sin(t * 3.2)
 
 func show_menu() -> void:
 	nick_edit.text = GameState.player_name
 	menu_panel.visible = true
 	get_tree().paused = true
 	SFX.play_music("music_menu")
+	# каскадное появление: заголовок падает сверху, доска выезжает, свечения разгораются
+	_menu_intro = 1.1
+	menu_title.position = Vector2(0, -26)
+	menu_title.modulate.a = 0.0
+	menu_sub.modulate.a = 0.0
+	menu_group.position = Vector2(169, 30)
+	menu_group.modulate.a = 0.0
+	menu_hint.modulate.a = 0.0
+	for g in menu_glows:
+		g.modulate.a = 0.0
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(menu_title, "position", Vector2(0, 16), 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(menu_title, "modulate:a", 1.0, 0.3)
+	tw.tween_property(menu_sub, "modulate:a", 1.0, 0.4).set_delay(0.25)
+	tw.tween_property(menu_group, "position", Vector2(169, 52), 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_delay(0.15)
+	tw.tween_property(menu_group, "modulate:a", 1.0, 0.35).set_delay(0.15)
+	tw.tween_property(menu_hint, "modulate:a", 1.0, 0.4).set_delay(0.6)
+	for i in range(menu_glows.size()):
+		tw.tween_property(menu_glows[i], "modulate:a", 0.5, 0.5).set_delay(0.3 + i * 0.1)
 
 func _start_game() -> void:
 	var nick := nick_edit.text.strip_edges()
@@ -342,6 +453,8 @@ func _start_game() -> void:
 # ---------- ЛОГИКА ----------
 
 func _process(delta: float) -> void:
+	if menu_panel.visible:
+		_menu_animate(delta)
 	if player and is_instance_valid(player) and not GameState.game_over:
 		hp_bar.value = 100.0 * player.hp / player.max_hp
 		hp_label.text = "%d/%d" % [maxi(0, int(player.hp)), int(player.max_hp)]
