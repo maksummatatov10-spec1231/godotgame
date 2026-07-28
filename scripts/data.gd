@@ -39,6 +39,27 @@ const ENEMIES := {
 		"death_fx": "assets/effects/skull_smoke", "coin_chance": 0.70,
 		"ranged": true,
 	},
+	# тёмный разбойник: быстрый и наглый (у него ещё и воровская версия!)
+	"dark_rogue": {
+		"dir": "assets/enemies/dark_rogue", "speed": 78.0, "hp": 14, "dmg": 9,
+		"xp": 2, "attack_range": 12.0, "attack_cd": 0.7, "radius": 8.0,
+		"move_anim": ["idle", 8.0], "no_attack_anim": true,
+		"death_fx": "assets/effects/splatter_red", "coin_chance": 0.45,
+	},
+	# щит-рыцарь: медленная серебряная громадина (спрайт knight из Penzilla)
+	"shieldknight": {
+		"dir": "assets/player/knight", "speed": 21.0, "hp": 95, "dmg": 14,
+		"xp": 5, "attack_range": 17.0, "attack_cd": 1.6, "radius": 12.0,
+		"move_anim": ["idle", 5.0], "no_attack_anim": true,
+		"death_fx": "assets/effects/splatter_red", "coin_chance": 0.9,
+	},
+	# некромант: воскрешает павших врагов (спрайт sage из Penzilla)
+	"necromancer": {
+		"dir": "assets/player/sage", "speed": 28.0, "hp": 40, "dmg": 8,
+		"xp": 6, "attack_range": 14.0, "attack_cd": 1.5, "radius": 10.0,
+		"move_anim": ["idle", 6.0], "no_attack_anim": true,
+		"death_fx": "assets/effects/skull_smoke", "coin_chance": 0.8,
+	},
 }
 
 # ---------- БОССЫ ----------
@@ -95,8 +116,10 @@ const WAVE_TABLE := [
 	[0.0,   [["skeleton1", 100]]],
 	[60.0,  [["skeleton1", 55], ["goblin", 30], ["skull", 15]]],
 	[180.0, [["skeleton1", 30], ["goblin", 25], ["skull", 20], ["skeleton2", 25]]],
-	[360.0, [["skeleton2", 30], ["skull", 20], ["vampire", 25], ["goblin", 25]]],
-	[540.0, [["vampire", 35], ["skeleton2", 35], ["skull", 30]]],
+	[360.0, [["skeleton2", 26], ["skull", 16], ["vampire", 22], ["goblin", 16],
+		["dark_rogue", 14], ["shieldknight", 5], ["necromancer", 5]]],
+	[540.0, [["vampire", 28], ["skeleton2", 28], ["skull", 20], ["dark_rogue", 16],
+		["shieldknight", 6], ["necromancer", 6]]],
 ]
 const BOSS_SCHEDULE := [
 	{"time": 120.0, "type": "demon", "hp_mult": 1.0},

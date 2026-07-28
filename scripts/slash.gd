@@ -16,8 +16,8 @@ static func strike(caller: Node, pos: Vector2, dir: Vector2, p_radius: float, p_
 	var spr := AnimLib.sprite("assets/bullets/slash/" + Data.SLASH_COLORS[tier], 15.0, false)
 	spr.scale = Vector2.ONE * (p_radius / 46.0)
 	s.add_child(spr)
-	# урон всем в передней полусфере
-	for e in GameState.enemies:
+	# урон всем в передней полусфере (копия списка: босс может разделиться прямо в ударе)
+	for e in GameState.enemies.duplicate():
 		if not is_instance_valid(e) or e.dead:
 			continue
 		var to_e: Vector2 = e.global_position - pos

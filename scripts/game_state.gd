@@ -22,6 +22,9 @@ var shots_hit := 0           # попадания дротиками (для т�
 # ---------- КОМБО (серия убийств без паузы -> звонкие монеты) ----------
 var combo := 0
 var combo_t := 0.0
+
+# ---------- ТРУПЫ (некромант ведёт реестр: позиция, тип, ост. времени) ----------
+var corpses := []
 var enemies: Array = []
 var pickups: Array = []
 var breakables: Array = []   # разрушаемые ящики (crate.gd)
@@ -81,6 +84,7 @@ func reset() -> void:
 	shots_hit = 0
 	combo = 0
 	combo_t = 0.0
+	corpses = []
 
 # ---------- ДВИЖЕНИЕ С ОБХОДОМ СТЕН (коллизии по клеткам TileMap) ----------
 

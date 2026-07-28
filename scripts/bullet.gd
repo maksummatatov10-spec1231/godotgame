@@ -13,6 +13,8 @@ var hit_fx_scale := 0.24
 var radius := 6.0
 var rot_offset := 0.0  # дротик нарисован влево, комета — вправо
 var trail := false     # магический шлейф (дротики 5+ тира)
+var bounces := 0       # рикошеты от стен (6+ тир)
+var boom := false      # взрыв по площади (красное пламя, 7+ тир)
 var _trail_t := 0.0
 
 var _sprite: AnimatedSprite2D
@@ -46,6 +48,8 @@ static func dart(pos: Vector2, d: Vector2, p_speed: float, p_dmg: float, tier: i
 	b.hit_fx_scale = cfg["hit_fx_scale"]
 	b.rot_offset = PI  # кадры смотрят влево
 	b.trail = tier >= 5  # фиолетовое пламя и выше оставляет искристый шлейф
+	b.bounces = 1 if tier >= 6 else 0  # фиолетовое: рикошет от стен
+	b.boom = tier >= 7   # КРАСНОЕ пламя взрывается по площади!
 	b.global_position = pos
 	b.z_index = 11
 	b._sprite = AnimLib.sprite("assets/bullets/dart/" + Data.DART_COLORS[tier], cfg["fps"], true)
@@ -89,9 +93,25 @@ func _process(delta: float) -> void:
 	if life <= 0.0 or not GameState.map_rect.grow(40).has_point(global_position):
 		_fizzle()
 		return
-	# столкновение со стеной карты
+	# столкновение со стеной: рикошет отражает дротик, иначе — снаряд гаснет
 	if not GameState.is_walkable(global_position):
-		_fizzle(true)
+		if bounces > 0:
+			bounces -= 1
+			var ahead_x := global_position + Vector2(dir.x * 5.0, 0)
+			var ahead_y := global_position + Vector2(0, dir.y * 5.0)
+			var wall_x := not GameState.is_walkable(ahead_x)
+			var wall_y := not GameState.is_walkable(ahead_y)
+			if wall_x and not wall_y:
+				dir = Vector2(-dir.x, dir.y)
+			elif wall_y and not wall_x:
+				dir = Vector2(dir.x, -dir.y)
+			else:
+				dir = -dir
+			rotation = dir.angle() + rot_offset
+			FX.sparkle(global_position, 0.15)
+			SFX.play_at("ricochet", global_position, -3.0)
+		else:
+			_fizzle(true)
 		return
 	if hostile:
 		_check_player()
@@ -107,7 +127,8 @@ func _check_player() -> void:
 		_fizzle(true)
 
 func _check_enemies() -> void:
-	for e in GameState.enemies:
+	# копия списка: босс может разделиться прямо от нашего попадания
+	for e in GameState.enemies.duplicate():
 		if not is_instance_valid(e) or e.dead or _hit_ids.has(e.get_instance_id()):
 			continue
 		if global_position.distance_to(e.global_position) < radius + e.radius:
@@ -121,6 +142,14 @@ func _check_enemies() -> void:
 				FX.sparkle(e.global_position, 0.2)
 			e.take_damage(final_dmg, dir, crit)
 			SFX.play("hit", -10.0)
+			if boom:
+				# красное пламя: взрыв бьёт соседей по площади (без само-цели)
+				FX.explosion(e.global_position, 0.55, false)
+				SFX.play_at("comet_hit", e.global_position, -6.0)
+				for o in GameState.enemies.duplicate():
+					if o != e and is_instance_valid(o) and not o.dead:
+						if e.global_position.distance_to(o.global_position) < 40.0:
+							o.take_damage(final_dmg * 0.5, e.global_position.direction_to(o.global_position))
 			if hit_fx != "":
 				FX.spawn(hit_fx, e.global_position, 18.0, hit_fx_scale)
 			if pierce > 0:

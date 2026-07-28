@@ -283,6 +283,13 @@ func _process(delta: float) -> void:
 		GameState.combo_t -= delta
 		if GameState.combo_t <= 0.0:
 			GameState.combo = 0
+	# реестр трупов для некроманта: стареют и исчезают
+	for i in range(GameState.corpses.size() - 1, -1, -1):
+		GameState.corpses[i]["t"] = float(GameState.corpses[i]["t"]) - delta
+		if float(GameState.corpses[i]["t"]) <= 0.0:
+			GameState.corpses.remove_at(i)
+	if GameState.corpses.size() > 18:  # не храним гору — некроманту хватит
+		GameState.corpses.remove_at(0)
 	_wave_director(delta)
 	_separate_enemies()
 	# победа через 10 минут (продолжаем ва-банк под садовую музыку)
@@ -306,6 +313,18 @@ func _wave_director(delta: float) -> void:
 	# элитки после 4-й минуты
 	if m >= 4.0 and randf() < delta * 0.055:
 		_spawn_enemy(_pick_type(GameState.run_time), _spawn_pos(true), true)
+	# вор-разбойник крадёт монеты (с 4-й минуты, раз в ~75 сек)
+	if m >= 4.0:
+		_thief_t -= delta
+		if _thief_t <= 0.0:
+			_thief_t = 75.0
+			_spawn_thief()
+	# марш скелетов (раз в ~95 сек, со 2.5-й минуты)
+	if m >= 2.5:
+		_march_t -= delta
+		if _march_t <= 0.0:
+			_march_t = 95.0
+			_skeleton_march()
 	# кольца мобов-сюрпризов
 	_event_t -= delta
 	if _event_t <= 0.0:
@@ -374,13 +393,40 @@ func _ring_pos(radius := 170.0, jitter := 0.0, anywhere := false) -> Vector2:
 		return GameState.play_rect.get_center()
 	return GameState.random_walkable_near(base, radius, radius + 30.0 + jitter, 12.0)
 
+var _thief_t := 70.0    # вор приходит с 4-й минуты
+var _march_t := 150.0   # марш скелетов строем
+
 func _spawn_enemy(type: String, pos: Vector2, elite := false) -> Enemy:
 	var e := Enemy.create(type, elite)
 	e.global_position = pos
+	# особые роли: берсерк-скелет (красный) и золотая элитка (дроп x3)
+	if type == "skeleton2" and not elite and randf() < 0.22:
+		e.berserk = true
+	if elite and randf() < 0.10:
+		e.golden = true
 	enemies_node.add_child(e)
 	GameState.enemies.append(e)
 	e.died.connect(_on_enemy_died)
 	return e
+
+## вор-разбойник: крадёт монеты с пола и улепётывает
+func _spawn_thief() -> void:
+	var e := _spawn_enemy("dark_rogue", _spawn_pos(true))
+	e.make_thief()
+	hud.flash("ВОР! БЕРЕГИ МОНЕТЫ!", 1.8)
+	SFX.play("scream", -3.0, 1.15)
+
+## марш скелетов: строй восстаёт из земли и идёт колонной
+func _skeleton_march() -> void:
+	var base := _spawn_pos(true)
+	var n := mini(10 + int(GameState.minutes * 2), 20)
+	for i in range(n):
+		var off := Vector2(float(i % 5) * 11.0, float(i) / 5.0 * 11.0)
+		var e2 := _spawn_enemy("skeleton1", base + off)
+		e2.orbit_t = 0.0
+	FX.smoke_skull(base, 1.0)
+	SFX.play("scream", -2.0, 0.8)
+	hud.flash("МАРШ СКЕЛЕТОВ!", 1.8)
 
 func _spawn_boss(type: String, hp_mult: float) -> void:
 	var b := Enemy.create_boss(type, hp_mult)
@@ -409,6 +455,7 @@ func _skull_ring() -> void:
 	for i in range(n):
 		var e := _spawn_enemy(type, Vector2.ZERO)
 		e.global_position = GameState.random_walkable_near(player.global_position, 130.0, 170.0, 12.0)
+		e.orbit_t = 3.2 + randf() * 0.6  # сначала кружат по орбите, потом бросаются!
 	FX.sparkle(player.global_position, 1.1)
 	hud.flash("КОЛЬЦО ТЕНЕЙ!", 1.6)
 
@@ -424,16 +471,26 @@ func _on_enemy_died(e: Enemy) -> void:
 		_spawn_pickup("key_gold", e.global_position + Vector2(-18, 8))
 		if GameState.player:
 			FX.crown(GameState.player.global_position)
-		GameState.current_boss = null
-		# эффектный финал: белая вспышка + слоу-мо (таймер идёт в РЕАЛЬНОМ времени)
-		if GameState.opt_slowmo and not GameState.game_over:
-			hud.flash_screen()
-			Engine.time_scale = 0.25
-			get_tree().create_timer(0.3, true, false, true).timeout.connect(
-				func(): Engine.time_scale = 1.0)
-		if not GameState.game_over:
-			SFX.play_music(music_track)  # орган отгремел — назад к боевой теме
-		hud.flash("БОСС ПОВЕРЖЕН!", 2.0)
+		# кровавая тварь делится: пока жив второй сгусток — финал не играем,
+		# стрелка и босс-музыка переходят к нему
+		var next_boss: Enemy = null
+		for o in GameState.enemies:
+			if is_instance_valid(o) and not o.dead and o.is_boss:
+				next_boss = o
+				break
+		GameState.current_boss = next_boss
+		if next_boss == null:
+			# эффектный финал: белая вспышка + слоу-мо (таймер в РЕАЛЬНОМ времени)
+			if GameState.opt_slowmo and not GameState.game_over:
+				hud.flash_screen()
+				Engine.time_scale = 0.25
+				get_tree().create_timer(0.3, true, false, true).timeout.connect(
+					func(): Engine.time_scale = 1.0)
+			if not GameState.game_over:
+				SFX.play_music(music_track)  # орган отгремел — назад к боевой теме
+			hud.flash("БОСС ПОВЕРЖЕН!", 2.0)
+		else:
+			hud.flash("СГУСТОК ПОВЕРЖЕН — ОСТАЛСЯ ЕЩЁ ОДИН!", 2.0)
 		return
 	# дроп: монеты, флаконы, ключи — падают из врагов
 	var cc: float = e.cfg.get("coin_chance", 0.45)
