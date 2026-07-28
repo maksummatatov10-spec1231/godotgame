@@ -30,4 +30,28 @@ static func smoke_skull(pos: Vector2, scale := 0.8) -> void: spawn("assets/effec
 static func coin_burst(pos: Vector2, scale := 0.6) -> void: spawn("assets/effects/coin_burst", pos, 18.0, scale)
 static func heart_burst(pos: Vector2, scale := 0.6) -> void: spawn("assets/effects/heart_burst", pos, 16.0, scale)
 static func smoke(pos: Vector2, scale := 0.5) -> void: spawn("assets/effects/smoke_burst", pos, 15.0, scale)
-static func cast(pos: Vector2) -> void: spawn("assets/bullets/cast", pos, 14.0, 0.8, 9)
+static func cast(pos: Vector2) -> void: spawn("assets/bullets/cast", pos, 14.0, 0.8, 15)
+
+# всплывающие цифры урона/лечения
+static func damage_number(pos: Vector2, amount: int, color := Color(1.0, 0.9, 0.3)) -> void:
+	if effects_root == null:
+		return
+	var l := Label.new()
+	l.text = str(amount)
+	l.z_index = 80
+	var ls := LabelSettings.new()
+	ls.font_size = 9
+	ls.font_color = color
+	ls.outline_size = 2
+	ls.outline_color = Color(0.1, 0.0, 0.1)
+	l.label_settings = ls
+	l.global_position = pos + Vector2(randf_range(-6.0, 6.0), -14.0)
+	effects_root.add_child(l)
+	var tw := l.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(l, "global_position:y", l.global_position.y - 12.0, 0.5)
+	tw.tween_property(l, "modulate:a", 0.0, 0.55)
+	tw.chain().tween_callback(l.queue_free)
+
+static func heal_number(pos: Vector2, amount: int) -> void:
+	damage_number(pos, amount, Color(0.4, 1.0, 0.4))

@@ -35,7 +35,6 @@ func _ready() -> void:
 
 func bind(p: Node2D) -> void:
 	player = p
-	player.leveled_up.connect(func(_lvl): pass)  # main уже подписан
 
 # ---------- ПОСТРОЕНИЕ UI ----------
 

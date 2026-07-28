@@ -187,6 +187,7 @@ func take_damage(p_dmg: float, from_dir := Vector2.ZERO) -> void:
 	hp -= p_dmg
 	_hit_flash = 0.1
 	sprite.modulate = Color(3.0, 3.0, 3.0)
+	FX.damage_number(global_position, int(p_dmg))
 	if not is_boss and from_dir != Vector2.ZERO:
 		global_position = GameState.clamp_to_arena(global_position + from_dir * 5.0, 6.0)
 	if hp <= 0.0:

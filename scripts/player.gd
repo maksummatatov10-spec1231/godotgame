@@ -129,8 +129,12 @@ func take_damage(dmg: float) -> void:
 		_die()
 
 func heal(amount: float) -> void:
+	var before := hp
 	hp = minf(hp + amount, max_hp)
 	FX.heal(global_position)
+	var gained := int(hp - before)
+	if gained > 0:
+		FX.heal_number(global_position, gained)
 
 func add_xp(amount: int) -> void:
 	xp += amount
