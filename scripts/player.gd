@@ -11,7 +11,7 @@ var hp := 100.0
 var speed := 105.0
 var level := 1
 var xp := 0
-var xp_next := 5
+var xp_next := 12  # ceil(4 * 1^1.35 / 0.7 * 2) — прокачка замедлена в 2 раза
 # оружие
 var dart_cd := 1.0
 var dart_dmg := 10.0
@@ -29,12 +29,16 @@ var upgrade_levels := {}
 var sprite: AnimatedSprite2D
 var body: Node2D           # обёртка спрайта: пульс каста не конфликтует с походкой
 var shadow: Polygon2D
+var glow: PointLight2D
+var nick_label: Label
+var outline_mat: ShaderMaterial
 var _t_dart := 0.4
 var _t_slash := 0.0
 var _iframes := 0.0
 var _regen_acc := 0.0
 var _walk_t := 0.0
 var _step_t := 0.0
+var _step_snd_t := 0.0
 var _dead := false
 
 # вспышка каста в цвет текущего пламени (золото → … → красное)
@@ -61,16 +65,52 @@ func _ready() -> void:
 	add_child(body)
 	sprite = AnimLib.sprite("assets/player/pyro/idle", 3.0, true)
 	body.add_child(sprite)
+	# контур: синий -> постепенно краснеет с каждым уровнем (отличить героя от врагов)
+	outline_mat = ShaderMaterial.new()
+	outline_mat.shader = load("res://shaders/outline.gdshader")
+	sprite.material = outline_mat
+	_update_outline()
+	# тёплое свечение героя (факел в руке!)
+	glow = PointLight2D.new()
+	glow.texture = load("res://assets/fx/light_warm.png")
+	glow.color = Color(1.0, 0.8, 0.55)
+	glow.texture_scale = 0.55
+	glow.energy = 0.4
+	add_child(glow)
+	# ник над головой (задаётся в главном меню)
+	nick_label = Label.new()
+	nick_label.position = Vector2(-50, -24)
+	nick_label.size = Vector2(100, 10)
+	nick_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var nls := LabelSettings.new()
+	nls.font_size = 7
+	nls.font_color = Color(0.8, 0.9, 1.0)
+	nls.outline_size = 2
+	nls.outline_color = Color(0, 0, 0, 0.9)
+	nick_label.label_settings = nls
+	nick_label.text = GameState.player_name
+	add_child(nick_label)
 	z_index = 12
 	GameState.player = self
+
+func _update_outline() -> void:
+	# с каждым уровнем контур всё краснее (полностью красный к ~13 уровню)
+	var base := Color(0.25, 0.60, 1.0)
+	var hot := Color(1.0, 0.25, 0.15)
+	outline_mat.set_shader_parameter("line_color", base.lerp(hot, minf(1.0, (level - 1) / 12.0)))
 
 func _process(delta: float) -> void:
 	if _dead or GameState.game_over:
 		return
-	# движение
+	# ник мог поменяться в меню
+	if nick_label.text != GameState.player_name:
+		nick_label.text = GameState.player_name
+	# пульсация свечения
+	glow.energy = 0.4 + 0.03 * sin(_walk_t * 1.7)
+	# движение (WASD + стрелки, действия move_* настроены в GameState)
 	var dir := Vector2(
-		Input.get_action_strength("ui_right") - Input.get_action_strength("ui_left"),
-		Input.get_action_strength("ui_down") - Input.get_action_strength("ui_up"))
+		Input.get_action_strength("move_right") - Input.get_action_strength("move_left"),
+		Input.get_action_strength("move_down") - Input.get_action_strength("move_up"))
 	if dir.length() > 0.0:
 		dir = dir.normalized()
 		global_position = GameState.slide_move(global_position, dir * speed * delta, 6.0)
@@ -82,11 +122,15 @@ func _process(delta: float) -> void:
 		var squash := sin(_walk_t * 2.0)
 		sprite.scale = Vector2(1.0 + squash * 0.05, 1.0 - squash * 0.06)
 		sprite.rotation = lerpf(sprite.rotation, dir.x * 0.10, delta * 10.0)
-		# пыль из-под ног
+		# пыль из-под ног + звук шагов
 		_step_t -= delta
 		if _step_t <= 0.0:
 			_step_t = 0.26
 			FX.smoke(global_position + Vector2(0, 5), 0.22, 8)
+		_step_snd_t -= delta
+		if _step_snd_t <= 0.0:
+			_step_snd_t = 0.36
+			SFX.play("step", -4.0)
 	else:
 		sprite.speed_scale = 1.0
 		sprite.scale = sprite.scale.lerp(Vector2.ONE, delta * 10.0)
@@ -125,6 +169,7 @@ func _process(delta: float) -> void:
 			tw.tween_property(body, "scale", Vector2(0.85, 1.18), 0.06)
 			tw.tween_property(body, "scale", Vector2.ONE, 0.16)
 			FX.sparkle(global_position + ndir * slash_radius * 0.5, 0.2)
+			SFX.play("slash", -6.0)
 			Slash.strike(self, global_position, ndir, slash_radius, slash_dmg, slash_tier)
 			_t_slash = slash_cd
 		else:
@@ -147,6 +192,7 @@ func _fire_darts(target: Node2D) -> void:
 	# герой всегда лицом к цели атаки (не "задом")
 	sprite.flip_h = target.global_position.x < global_position.x
 	FX.cast(global_position + Vector2(0, -3))
+	SFX.play("shoot", -8.0)
 	# вспышка "руки": искра в точке вылета снаряда
 	FX.impact_yellow(global_position + base_dir * 10.0 + Vector2(0, -3), 0.13)
 	# отдача-пульс каста на обёртке (не конфликтует с походкой)
@@ -172,6 +218,7 @@ func take_damage(dmg: float) -> void:
 		return
 	hp -= dmg
 	_iframes = 0.55
+	SFX.play("player_hurt", -2.0)
 	sprite.modulate = Color(3.0, 0.6, 0.6)
 	var t := Timer.new()
 	t.wait_time = 0.12
@@ -200,9 +247,12 @@ func add_xp(amount: int) -> void:
 	while xp >= xp_next:
 		xp -= xp_next
 		level += 1
-		xp_next = int(ceil(4.0 * pow(level, 1.35)))
+		# прокачка замедлена в ~2.86 раза (x1/0.7 * 2) по просьбе
+		xp_next = int(ceil(4.0 * pow(level, 1.35) / 0.7 * 2.0))
+		_update_outline()
 		FX.level_up(global_position + Vector2(0, -18))
 		FX.sparkle(global_position, 0.5)
+		SFX.play("levelup", -2.0)
 		leveled_up.emit(level)
 
 func apply_upgrade(id: String) -> void:

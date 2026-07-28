@@ -22,6 +22,9 @@ var _lunge_t := 0.0
 var _hit_flash := 0.0
 var _attacking := false
 var _wobble_t := 0.0
+var _spawn_lock := 0.0      # интро-анимация появления: враг ещё не атакует и не идёт
+var _step_t := 0.0
+var _hop := 1.0             # высота процедурного шага по типу
 
 static func create(p_type: String, p_elite := false) -> Enemy:
 	var e := Enemy.new()
@@ -57,6 +60,11 @@ func _ready() -> void:
 	if not is_boss:
 		hp *= 1.0 + GameState.minutes * 0.22
 		max_hp = hp
+		# честный рост HP от уровня героя (+7% за уровень выше 1-го)
+		var pl := GameState.player
+		if pl and "level" in pl:
+			hp *= 1.0 + 0.07 * float(maxi(0, pl.level - 1))
+			max_hp = hp
 	sprite = AnimatedSprite2D.new()
 	add_child(sprite)
 	z_index = 10
@@ -67,6 +75,82 @@ func _ready() -> void:
 		sprite.scale = Vector2.ONE * 1.35
 		sprite.modulate = Color(1.5, 0.8, 1.8)
 	_play("move_anim")
+	_apply_spawn_intro()
+
+# ---------- ИНТРО-АНИМАЦИЯ ПОЯВЛЕНИЯ (у каждого своя!) ----------
+
+func _apply_spawn_intro() -> void:
+	if is_boss:
+		_spawn_lock = 1.25
+		if type_name == "demon":
+			# демон вспарывает землю огнём
+			FX.explosion(global_position, 1.4)
+			FX.spawn("assets/bullets/cast", global_position + Vector2(0, 4), 12.0, 1.3, 12)
+		else:
+			# кровавая тварь собирается из лужи крови
+			FX.splatter(global_position, false, 1.6)
+			FX.explosion(global_position, 1.3, true)
+			FX.smoke_skull(global_position, 0.9)
+		sprite.scale = Vector2.ONE * cfg["scale"] * 0.35
+		sprite.modulate.a = 0.0
+		return
+	_spawn_lock = 0.7 if elite else 0.5
+	match type_name:
+		"skeleton1", "skeleton2":
+			# восстает из-под земли
+			sprite.position.y = 10.0
+			sprite.modulate.a = 0.0
+			FX.splatter(global_position + Vector2(0, 4), false, 0.25)
+		"goblin":
+			# выскакивает из клуба зелёной пыли
+			var base := sprite.scale
+			sprite.scale = base * 0.25
+			sprite.set_meta("base_scale", base)
+			FX.splatter(global_position, true, 0.3)
+		"skull":
+			# роняется сверху, трясясь
+			sprite.position.y = -16.0
+			sprite.modulate.a = 0.0
+		"vampire":
+			# сгущается из дыма
+			sprite.modulate.a = 0.0
+			FX.smoke_skull(global_position, 0.55)
+	if elite:
+		_spawn_lock = 0.8
+		SFX.play("spawn", -4.0, 0.9)
+		FX.sparkle(global_position, 0.5)
+
+func _update_spawn_intro(delta: float) -> void:
+	_spawn_lock -= delta
+	var done := _spawn_lock <= 0.0
+	if is_boss:
+		var k := clampf(1.0 - _spawn_lock / 1.25, 0.0, 1.0)
+		sprite.scale = Vector2.ONE * cfg["scale"] * (0.35 + 0.65 * k)
+		sprite.modulate.a = minf(1.0, k * 2.2)
+		position.x += randf_range(-0.7, 0.7) * (1.0 - k)  # дрожание при сборке
+	else:
+		var k := clampf(1.0 - _spawn_lock / (0.8 if elite else 0.5), 0.0, 1.0)
+		match type_name:
+			"skeleton1", "skeleton2":
+				sprite.position.y = lerpf(10.0, 0.0, k)
+				sprite.modulate.a = minf(1.0, k * 2.0)
+			"goblin":
+				var base: Vector2 = sprite.get_meta("base_scale", Vector2.ONE * (1.35 if elite else 1.0))
+				var overshoot := 1.0 + 0.18 * sin(k * PI)
+				sprite.scale = base * (0.25 + 0.75 * k) * overshoot
+			"skull":
+				sprite.position.y = lerpf(-16.0, 0.0, k)
+				sprite.position.x = sin(k * 12.0) * 2.0 * (1.0 - k)
+				sprite.modulate.a = minf(1.0, k * 2.4)
+			"vampire":
+				sprite.modulate.a = minf(1.0, k * 1.6)
+	if done:
+		sprite.modulate.a = 1.0
+		sprite.position = Vector2.ZERO
+		if type_name == "goblin":
+			sprite.scale = sprite.get_meta("base_scale", Vector2.ONE)
+		if elite:
+			FX.sparkle(global_position, 0.35)
 
 func _play(key: String) -> void:
 	if not cfg.has(key):
@@ -92,6 +176,10 @@ func _process(delta: float) -> void:
 		_hit_flash -= delta
 		if _hit_flash <= 0.0:
 			sprite.modulate = Color(1.5, 0.8, 1.8) if elite else Color.WHITE
+	# интро-анимация появления: враг ещё не опасен
+	if _spawn_lock > 0.0:
+		_update_spawn_intro(delta)
+		return
 	var p := GameState.player
 	if p == null or not is_instance_valid(p) or GameState.game_over:
 		return
@@ -132,6 +220,7 @@ func _process(delta: float) -> void:
 	if dist < cfg["attack_range"] + 4.0:
 		_touch_damage()
 	elif not _attacking:
+		_hop = {"goblin": 2.2, "skull": 1.1}.get(type_name, 0.8)
 		var speed_val: float = cfg["speed"]
 		var step: Vector2 = dir * speed_val * delta
 		if cfg.get("wobble", false):
@@ -139,6 +228,11 @@ func _process(delta: float) -> void:
 			step += dir.rotated(PI / 2.0) * sin(_wobble_t) * 36.0 * delta
 		global_position = GameState.slide_move(global_position, step, 6.0)
 		_play("move_anim")
+		# процедурная походка поверх/вместо анимкадров (у гоблина и черепа кадров ходьбы нет)
+		_step_t += delta * speed_val * 0.11
+		if not is_boss:
+			sprite.position.y = -absf(sin(_step_t)) * _hop
+			sprite.rotation = sin(_step_t) * (0.06 if type_name == "goblin" else 0.035)
 
 func _touch_damage() -> void:
 	var p := GameState.player
@@ -166,6 +260,7 @@ func _ranged_shot(p: Node2D) -> void:
 			var d := global_position.direction_to(p.global_position)
 			var b := Bullet.hostile_shot("orb_violet", global_position, d, dmg)
 			get_parent().get_parent().get_node("Bullets").add_child(b)
+			SFX.play("vampire_shot", -3.0)
 	)
 	_back_to_move_once()
 
@@ -205,6 +300,12 @@ func die() -> void:
 		return
 	dead = true
 	died.emit(self)
+	if is_boss:
+		SFX.play("boss_die", -1.0)
+	elif elite:
+		SFX.play("elite_die", -2.0)
+	else:
+		SFX.play("enemy_die", -4.0, 0.92)
 	var fx_scale := 0.45
 	if type_name == "goblin":
 		FX.splatter(global_position, true)

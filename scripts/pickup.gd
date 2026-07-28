@@ -7,10 +7,15 @@ extends Node2D
 var kind := "coin"
 var value := 1
 var sprite: AnimatedSprite2D
+var arrow: TextureRect  # деревянная стрелка-указатель над сундуками
 var _vel := Vector2.ZERO
 var _flying := false
 var _opened := false
 var _bob_t := 0.0
+var _life := 0.0
+
+const DESPAWN_AT := 46.0   # сек жизни мелкого лута (сундуки вечные)
+const BLINK_AT := 36.0     # начало мигания "я скоро пропаду!"
 
 static func spawn(kind_name: String, pos: Vector2) -> Pickup:
 	var p := Pickup.new()
@@ -51,6 +56,15 @@ static func spawn(kind_name: String, pos: Vector2) -> Pickup:
 	p.global_position = pos
 	p.z_index = 5
 	p.add_child(p.sprite)
+	if p.is_chest():
+		# деревянная стрелка над неоткрытым сундуком (UI-пак)
+		p.arrow = TextureRect.new()
+		p.arrow.texture = load("res://assets/ui/fantasy/arrow_wood.png")
+		p.arrow.position = Vector2(-8, -46)
+		p.arrow.pivot_offset = Vector2(8, 26)
+		p.arrow.scale = Vector2.ONE * 0.75
+		p.arrow.z_index = 7
+		p.add_child(p.arrow)
 	GameState.pickups.append(p)
 	return p
 
@@ -58,8 +72,21 @@ func is_chest() -> bool:
 	return kind == "chest" or kind == "mini_chest"
 
 func _process(delta: float) -> void:
+	if _opened:
+		return
+	_life += delta
+	# время жизни мелкого лута: мигание и исчезновение (сундуки вечные)
+	if not is_chest():
+		if _life >= DESPAWN_AT:
+			_despawn()
+			return
+		if _life >= BLINK_AT:
+			sprite.modulate.a = 0.35 + 0.65 * absf(sin(_life * 9.0))
+	elif arrow:
+		arrow.position.y = -46 + sin(_life * 4.0) * 3.0  # стрелка приглашает
+		arrow.rotation = sin(_life * 4.0) * 0.12
 	var pl := GameState.player
-	if pl == null or not is_instance_valid(pl) or _opened:
+	if pl == null or not is_instance_valid(pl):
 		return
 	var dist := global_position.distance_to(pl.global_position)
 	if is_chest():
@@ -78,22 +105,36 @@ func _process(delta: float) -> void:
 		_bob_t += delta * 4.0
 		sprite.position.y = sin(_bob_t) * 1.2
 
+func _despawn() -> void:
+	GameState.pickups.erase(self)
+	FX.smoke(global_position, 0.3, 20)
+	var tw := sprite.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(sprite, "scale", Vector2.ZERO, 0.22)
+	tw.tween_property(sprite, "modulate:a", 0.0, 0.22)
+	tw.chain().tween_callback(queue_free)
+
 func _collect(pl: Node2D) -> void:
 	match kind:
 		"coin":
 			pl.add_xp(1)
+			SFX.play("coin", -6.0)
 		"gem":
 			pl.add_xp(value)
 			FX.sparkle(global_position, 0.25)
+			SFX.play("gem", -6.0)
 		"elixir":
 			pl.add_xp(value)
 			FX.sparkle(global_position, 0.35)
+			SFX.play("gem", -4.0, 0.85)
 		"key_silver", "key_gold":
 			pl.add_xp(value)
 			FX.sparkle(global_position, 0.4)
 			FX.coin_burst(global_position, 0.25)
+			SFX.play("key", -4.0, 1.1 if kind == "key_gold" else 1.0)
 		"heal", "heal_big":
 			pl.heal(float(value))
+			SFX.play("flask", -4.0, 1.1 if kind == "heal_big" else 1.0)
 	GameState.pickups.erase(self)
 	queue_free()
 
@@ -102,19 +143,23 @@ func _open_chest() -> void:
 		return
 	_opened = true
 	GameState.pickups.erase(self)
-	var mini := kind == "mini_chest"
+	if arrow:
+		arrow.queue_free()  # сундук открыт — указатель больше не нужен
+		arrow = null
+	var is_mini := kind == "mini_chest"
 	sprite.sprite_frames = AnimLib.frames(
-		"assets/items/mini_chest_open" if mini else "assets/items/chest_open", 10.0, false)
+		"assets/items/mini_chest_open" if is_mini else "assets/items/chest_open", 10.0, false)
 	sprite.play("default")
-	FX.coin_burst(global_position, 0.3 if mini else 0.5)
+	FX.coin_burst(global_position, 0.3 if is_mini else 0.5)
+	SFX.play("crate" if is_mini else "chest", -3.0, 1.15 if is_mini else 1.0)
 	sprite.animation_finished.connect(func():
 		# монеты крутятся вокруг, потом летят к игроку
-		var coins := 3 if mini else 6
+		var coins := 3 if is_mini else 6
 		for i in range(coins):
 			var coin := Pickup.spawn(
 				"coin", global_position + Vector2.from_angle(TAU * i / float(coins)) * randf_range(8.0, 16.0))
 			get_parent().add_child(coin)
-		if not mini:
+		if not is_mini:
 			for i in range(2):
 				var gem := Pickup.spawn(
 					"gem", global_position + Vector2(randf_range(-14, 14), randf_range(-10, 10)))

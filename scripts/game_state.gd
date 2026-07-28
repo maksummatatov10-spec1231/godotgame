@@ -6,8 +6,10 @@ var map_rect := Rect2(32, 48, 960, 512)    # вся нарисованная к�
 var play_rect := Rect2(50, 66, 924, 448)   # играбельная зона (карта минус стены)
 
 var player: Node2D = null
+var player_name := "ГЕРОЙ"   # задаётся в главном меню (живёт между рестартами)
 var enemies: Array = []
 var pickups: Array = []
+var closed_doors := {}          # Vector2i -> Door: закрытые двери (непроходимы, см. door.gd)
 var kills := 0
 var run_time := 0.0
 var current_boss: Node2D = null
@@ -17,12 +19,38 @@ var won := false
 var minutes: float:
 	get: return run_time / 60.0
 
+func _ready() -> void:
+	_setup_input()
+
+# Управление: WASD + стрелки (physical_keycode — раскладка клавиатуры не важна,
+# т.е. WASD работает и на русской раскладке).
+func _setup_input() -> void:
+	var binds := {
+		"move_left": [KEY_A, KEY_LEFT],
+		"move_right": [KEY_D, KEY_RIGHT],
+		"move_up": [KEY_W, KEY_UP],
+		"move_down": [KEY_S, KEY_DOWN],
+	}
+	for action in binds:
+		if not InputMap.has_action(action):
+			InputMap.add_action(action)
+		for key in binds[action]:
+			var already := false
+			for old_ev in InputMap.action_get_events(action):
+				if old_ev is InputEventKey and old_ev.physical_keycode == key:
+					already = true
+			if not already:
+				var ev := InputEventKey.new()
+				ev.physical_keycode = key
+				InputMap.action_add_event(action, ev)
+
 func reset() -> void:
 	# arena/map_rect/play_rect НЕ трогаем: Arena регистрирует себя в _ready
 	# (дети сцены готовятся раньше родителя, т.е. до вызова reset из Main)
 	player = null
 	enemies = []
 	pickups = []
+	closed_doors = {}
 	kills = 0
 	run_time = 0.0
 	current_boss = null

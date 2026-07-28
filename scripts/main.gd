@@ -55,13 +55,20 @@ const LOOT_TILES := {
 	Vector2i(4, 8): "mini_chest",  # мини-сундуки
 	Vector2i(5, 8): "mini_chest",
 }
-# тайлы -> анимированный декор (факелы и свечи горят!)
+	# тайлы -> анимированный декор (факелы и свечи горят!)
 const DECOR_TILES := {
 	Vector2i(0, 9): "assets/items/torch",
 	Vector2i(1, 9): "assets/items/torch",
 	Vector2i(2, 9): "assets/items/candle2",
 	Vector2i(3, 9): "assets/items/candle1",
 	Vector2i(5, 9): "assets/items/candle1",
+}
+# параметры света для каждого типа декора: [цвет, радиус, яркость]
+const DECOR_LIGHT := {
+	"assets/items/torch": [Color(1.0, 0.72, 0.40), 1.15, 0.95],
+	"assets/items/torch_side": [Color(1.0, 0.72, 0.40), 0.95, 0.85],
+	"assets/items/candle1": [Color(1.0, 0.78, 0.45), 0.60, 0.60],
+	"assets/items/candle2": [Color(1.0, 0.78, 0.45), 0.50, 0.50],
 }
 
 var _spawn_t := 0.0
@@ -72,9 +79,36 @@ var _loot_cycle := 0
 var _boss_idx := 0
 var _spawn_points: Array = []
 var _pickup_points: Array = []
+var _flickers: Array = []  # PointLight2D'ы с мерцанием (факелы/свечи)
+var _light_tex: Texture2D = null
+
+func _mk_light(color: Color, tex_scale: float, energy: float) -> PointLight2D:
+	if _light_tex == null:
+		_light_tex = load("res://assets/fx/light_warm.png")
+	var l := PointLight2D.new()
+	l.texture = _light_tex
+	l.color = color
+	l.texture_scale = tex_scale
+	l.energy = energy
+	l.shadow_enabled = false
+	l.set_meta("base_e", energy)
+	_flickers.append(l)
+	return l
+
+func _decor_with_light(anim_path: String, pos: Vector2) -> AnimatedSprite2D:
+	var spr := AnimLib.sprite(anim_path, 6.0, true)
+	spr.global_position = pos
+	decor_node.add_child(spr)
+	var lp: Array = DECOR_LIGHT.get(anim_path, [])
+	if not lp.is_empty():
+		var l := _mk_light(lp[0], lp[1], lp[2])
+		l.position = pos + Vector2(0, -3)
+		decor_node.add_child(l)
+	return spr
 
 func _ready() -> void:
 	GameState.reset()
+	SFX.attach(self)  # звуки и музыка (assets/sfx/*.wav)
 	# контейнеры по z-порядку
 	decor_node = _mk("Decor", 0, 2)
 	pickups_node = _mk("Pickups", 0, 4)
@@ -117,7 +151,8 @@ func _ready() -> void:
 	# стартовые прожиточные монстры
 	for i in range(3):
 		_spawn_enemy("skeleton1", player.global_position + Vector2.from_angle(TAU * i / 3.0) * 120)
-	hud.flash("ВЫЖИВИ 10 МИНУТ!", 2.6)
+	# главное меню (ник, старт, своя музыка)
+	hud.show_menu()
 
 func _mk(nname: String, _z := 0, _rel_z := 0) -> Node2D:
 	var n := Node2D.new()
@@ -166,43 +201,46 @@ func _player_start() -> Vector2:
 # ---------------- ОЖИВЛЕНИЕ ДЕКОР-СЛОЯ ----------------
 
 func _scan_user_layers() -> void:
-	# все TileMapLayer в сцене, кроме арены: монеты/флаконы -> предметы, факелы -> огонь
+	# ВСЕ TileMapLayer сцены (включая слой Arena!):
+	# монеты/флаконы/ключи/сундуки -> настоящие предметы, факелы/свечи -> горящие спрайты,
+	# двери (6,2)/(8,3) на слое Arena -> живые двери (door.gd).
 	for n in find_children("*", "TileMapLayer", true, false):
 		var layer := n as TileMapLayer
-		if layer == null or layer == GameState.arena:
+		if layer == null:
 			continue
+		var is_arena := layer == GameState.arena
 		for cell in layer.get_used_cells():
 			var ac := layer.get_cell_atlas_coords(cell)
 			var wpos := layer.to_global(layer.map_to_local(cell))
-			if LOOT_TILES.has(ac):
+			if is_arena and Door.CLOSED_TILES.has(ac):
+				add_child(Door.register(cell, ac))
+			elif LOOT_TILES.has(ac):
 				pickups_node.add_child(Pickup.spawn(LOOT_TILES[ac], wpos))
-				layer.erase_cell(cell)
+				_free_cell(layer, cell, is_arena)
 			elif DECOR_TILES.has(ac):
-				var spr := AnimLib.sprite(DECOR_TILES[ac], 6.0, true)
-				spr.global_position = wpos
-				decor_node.add_child(spr)
-				layer.erase_cell(cell)
+				_decor_with_light(DECOR_TILES[ac], wpos)
+				_free_cell(layer, cell, is_arena)
+
+func _free_cell(layer: TileMapLayer, cell: Vector2i, is_arena: bool) -> void:
+	if is_arena:
+		layer.set_cell(cell, 0, Vector2i(2, 1))  # под предметом остаётся пол (дыра была бы стеной)
+	else:
+		layer.erase_cell(cell)
 
 # ---------------- ДЕФОЛТНЫЙ ДЕКОР (только для дефолтной арены) ----------------
 
 func _decorate() -> void:
-	# факелы на верхней стене
+	# факелы на верхней стене (со светом!)
 	for x in range(96, 929, 104):
-		var torch := AnimLib.sprite("assets/items/torch", 6.0, true)
-		torch.global_position = Vector2(x, 50)
-		decor_node.add_child(torch)
+		_decor_with_light("assets/items/torch", Vector2(x, 50))
 	# боковые факелы
 	for y in [130, 240, 350, 460]:
 		for x in [41, 983]:
-			var st := AnimLib.sprite("assets/items/torch_side", 6.0, true)
-			st.position = Vector2(x, y)
+			var st := _decor_with_light("assets/items/torch_side", Vector2(x, y))
 			st.flip_h = x > 900
-			decor_node.add_child(st)
 	# подсвечники у двери
 	for x in [492, 548]:
-		var c := AnimLib.sprite("assets/items/candle1", 6.0, true)
-		c.global_position = Vector2(x, 500)
-		decor_node.add_child(c)
+		_decor_with_light("assets/items/candle1", Vector2(x, 500))
 	# шипы
 	for pos in [Vector2(170, 150), Vector2(854, 160), Vector2(200, 440), Vector2(810, 450), Vector2(512, 200)]:
 		var s := Spikes.new()
@@ -224,6 +262,14 @@ func _decorate() -> void:
 		decor_node.add_child(mc)
 
 func _process(delta: float) -> void:
+	# мерцание огня факелов/свечей (живое пламя!)
+	if not _flickers.is_empty():
+		var t := Time.get_ticks_msec() / 1000.0
+		for l in _flickers:
+			if is_instance_valid(l):
+				l.energy = l.get_meta("base_e", 0.8) * (
+					0.88 + 0.10 * sin(t * 9.0 + l.position.x * 0.61 + l.position.y * 1.13)
+					+ 0.06 * sin(t * 23.0 + l.position.y * 0.37))
 	if GameState.game_over:
 		return
 	GameState.run_time += delta
@@ -232,6 +278,7 @@ func _process(delta: float) -> void:
 	# победа через 10 минут (продолжаем ва-банк)
 	if not GameState.won and GameState.run_time >= Data.WIN_TIME:
 		GameState.won = true
+		SFX.play("win", -1.0)
 		hud.show_win()
 
 # ---------------- СПАВН ----------------
@@ -332,6 +379,7 @@ func _spawn_boss(type: String, hp_mult: float) -> void:
 	GameState.current_boss = b
 	b.died.connect(_on_enemy_died)
 	FX.smoke_skull(b.global_position, 1.2)
+	SFX.play("boss", -1.0)
 	hud.flash("БОСС: %s!" % Data.BOSSES[type]["title"], 2.2)
 
 func _spawn_pickup(kind: String, pos := Vector2.ZERO) -> void:
@@ -422,4 +470,6 @@ func on_upgrade_picked(id: String) -> void:
 
 func _on_player_died() -> void:
 	GameState.game_over = true
+	SFX.music_off()
+	SFX.play("gameover", -1.0)
 	hud.show_game_over()

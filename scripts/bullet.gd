@@ -16,6 +16,22 @@ var rot_offset := 0.0  # дротик нарисован влево, комет�
 var _sprite: AnimatedSprite2D
 var _hit_ids := []
 
+# цвет свечения дротика по тиру (совпадает с палитрой пламени)
+const TIER_LIGHT := [
+	Color(1.0, 0.85, 0.4), Color(1.0, 0.7, 0.3), Color(1.0, 0.55, 0.2),
+	Color(0.5, 1.0, 0.4), Color(0.4, 0.7, 1.0), Color(0.7, 0.4, 1.0),
+	Color(1.0, 0.4, 0.9), Color(1.0, 0.3, 0.25),
+]
+
+static func _mk_light(color: Color, tex_scale: float, energy: float) -> PointLight2D:
+	var l := PointLight2D.new()
+	l.texture = load("res://assets/fx/light_warm.png")
+	l.color = color
+	l.texture_scale = tex_scale
+	l.energy = energy
+	l.shadow_enabled = false
+	return l
+
 static func dart(pos: Vector2, d: Vector2, p_speed: float, p_dmg: float, tier: int) -> Bullet:
 	var b := Bullet.new()
 	b.dir = d
@@ -31,6 +47,7 @@ static func dart(pos: Vector2, d: Vector2, p_speed: float, p_dmg: float, tier: i
 	b.z_index = 11
 	b._sprite = AnimLib.sprite("assets/bullets/dart/" + Data.DART_COLORS[tier], cfg["fps"], true)
 	b.add_child(b._sprite)
+	b.add_child(_mk_light(TIER_LIGHT[clampi(tier, 0, 7)], 0.32, 0.5))
 	return b
 
 static func hostile_shot(projectile_id: String, pos: Vector2, d: Vector2, p_dmg: float) -> Bullet:
@@ -47,6 +64,12 @@ static func hostile_shot(projectile_id: String, pos: Vector2, d: Vector2, p_dmg:
 	b.z_index = 11
 	b._sprite = AnimLib.sprite(cfg["dir"], cfg["fps"], true)
 	b.add_child(b._sprite)
+	# свечение вражеских снарядов + кометы шумят при взрыве
+	var dir_str: String = cfg.get("dir", "")
+	if "comet" in dir_str:
+		b.add_child(_mk_light(Color(1.0, 0.35, 0.2), 0.55, 0.6))
+	elif "orb" in dir_str:
+		b.add_child(_mk_light(Color(0.7, 0.4, 1.0), 0.35, 0.4))
 	return b
 
 func _ready() -> void:
@@ -82,6 +105,7 @@ func _check_enemies() -> void:
 		if global_position.distance_to(e.global_position) < radius + e.radius:
 			_hit_ids.append(e.get_instance_id())
 			e.take_damage(dmg, dir)
+			SFX.play("hit", -10.0)
 			if hit_fx != "":
 				FX.spawn(hit_fx, e.global_position, 18.0, hit_fx_scale)
 			if pierce > 0:
@@ -93,4 +117,6 @@ func _check_enemies() -> void:
 func _fizzle(with_fx := false) -> void:
 	if with_fx and hit_fx != "":
 		FX.spawn(hit_fx, global_position, 18.0, hit_fx_scale)
+		if hostile and hit_fx_scale > 0.5:  # большой взрыв кометы шумит
+			SFX.play("comet_hit", -3.0)
 	queue_free()

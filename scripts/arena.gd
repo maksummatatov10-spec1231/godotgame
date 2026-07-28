@@ -7,6 +7,11 @@ extends TileMapLayer
 
 const TS := 16
 # atlas-строки, считающиеся СТЕНАМИ (непроходимыми) — см. tutorial
+# ряд 0  — крышки стен (верх)
+# ряд 4  — лицо стены
+# ряд 5  — низ стены (тень)
+# ряд 7  — декор НА стенах (знамя, цепи, черепа) — висит на стене → тоже стена
+# ряды 1,2,3,6,8,9 — пол/предметы (проходимо), КРОМЕ закрытых дверей (см. door.gd)
 const WALL_ROWS := [0, 4, 5, 7]
 @export var default_paint := true  # сними галку, если рисуешь карту полностью сам
 @export var demo_paint := false    # вкл только в обучающей сцене demo_map.tscn
@@ -27,6 +32,8 @@ func is_walkable(world_pos: Vector2) -> bool:
 	var ac := get_cell_atlas_coords(cell)
 	if ac == Vector2i(-1, -1):
 		return false  # пустота за пределами рисованной карты — непроходима
+	if GameState.closed_doors.has(cell):
+		return false  # закрытая дверь — стена и для героя, и для врагов, и для снарядов
 	return not WALL_ROWS.has(ac.y)
 
 func _map_rect() -> Rect2:
@@ -124,11 +131,12 @@ func _paint_demo() -> void:
 	for ty in range(4, 20):
 		set_cell(Vector2i(2, ty), 0, face[ty % face.size()])
 		set_cell(Vector2i(37, ty), 0, face[ty % face.size()])
-	# дверь внизу по центру + проём в верхней стене
+	# дверь внизу по центру (живая — вскрывается при подходе)
 	set_cell(Vector2i(20, 20), 0, Vector2i(8, 3))
+	# верхний проём с ТРЕМЯ ЗАКРЫТЫМИ ДВЕРЬМИ (6,2) — вскрой их!
 	for gap in [19, 20, 21]:
 		set_cell(Vector2i(gap, 2), 0, Vector2i(2, 1))
-		set_cell(Vector2i(gap, 3), 0, Vector2i(3, 2))
+		set_cell(Vector2i(gap, 3), 0, Vector2i(6, 2))
 	# колонны 2x2 (капители сверху, грани снизу) — непроходимые
 	for p in [Vector2i(10, 8), Vector2i(27, 8), Vector2i(10, 15), Vector2i(27, 15)]:
 		set_cell(p, 0, Vector2i(1, 0))

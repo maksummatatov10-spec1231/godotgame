@@ -17,4 +17,5 @@ func _process(delta: float) -> void:
 	var pl := GameState.player
 	if pl and is_instance_valid(pl) and global_position.distance_to(pl.global_position) < 11.0:
 		_tick = 0.55
+		SFX.play("spike", -6.0)
 		pl.take_damage(8.0)
