@@ -139,7 +139,7 @@ func _check_enemies() -> void:
 	for e in GameState.enemies:
 		if not is_instance_valid(e) or e.dead or _hit_ids.has(e.get_instance_id()):
 			continue
-		var rr := radius + e.radius
+		var rr: float = radius + e.radius  # явный тип: e.radius — Variant, := тут не выводится
 		if global_position.distance_squared_to(e.global_position) < rr * rr:
 			_hit_ids.append(e.get_instance_id())
 			GameState.shots_hit += 1
