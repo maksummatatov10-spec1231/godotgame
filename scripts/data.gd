@@ -134,7 +134,7 @@ const PROJECTILES := {
 	"comet_red": {"dir": "assets/bullets/comet/red", "fps": 10.0, "face_left": false, "life": 3.4, "speed": 105.0, "hit_fx": "assets/bullets/fire_explosion/red", "hit_fx_scale": 1.0},
 	# мяч командира/выбивалы и ракета стальной батареи (из пака боссов)
 	"puck": {"dir": "assets/bullets/puck", "fps": 6.0, "face_left": false, "life": 3.2, "speed": 115.0, "hit_fx": "assets/effects/impact_yellow", "hit_fx_scale": 0.3},
-	"rocket": {"dir": "assets/bullets/rocket", "fps": 8.0, "face_left": false, "life": 3.6, "speed": 130.0, "hit_fx": "assets/effects/explosion_orange", "hit_fx_scale": 0.6},
+	"rocket": {"dir": "assets/bullets/rocket", "fps": 8.0, "face_left": true, "life": 3.6, "speed": 130.0, "hit_fx": "assets/effects/explosion_orange", "hit_fx_scale": 0.6},
 }
 
 # цвета дротика по уровню урона (все 8 листов пака!)

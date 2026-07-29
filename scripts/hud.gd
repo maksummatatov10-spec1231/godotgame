@@ -338,16 +338,25 @@ func _card(i: int, u: Dictionary) -> Control:
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	d.clip_text = true
 	root.add_child(d)
-	# цифра клавиши — мини-панелька внизу карточки
+	# цифра клавиши — мини-панелька внизу слева; справа — ТВОЙ УРОВЕНЬ этой силы
 	var chip := UIPanel.new()
 	chip.size = Vector2(24, 14)
-	chip.position = Vector2(w / 2.0 - 12, h - 22)
+	chip.position = Vector2(10, h - 22)
 	chip.accent = accent
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(chip)
-	var hint := _mk_label(str(i + 1), Vector2(w / 2.0 - 12, h - 21), 9, Color(1, 1, 1), HORIZONTAL_ALIGNMENT_CENTER)
+	var hint := _mk_label(str(i + 1), Vector2(10, h - 21), 9, Color(1, 1, 1), HORIZONTAL_ALIGNMENT_CENTER)
 	hint.size = Vector2(24, 12)
 	root.add_child(hint)
+	# УР. N: сколько раз ты уже брал эту силу (новая — сияет "НОВОЕ!")
+	var lvl := 0
+	if GameState.player != null and is_instance_valid(GameState.player):
+		lvl = int(GameState.player.upgrade_levels.get(u["id"], 0))
+	var lvl_text := "НОВОЕ!" if lvl == 0 else "УР. %d" % lvl
+	var lvl_color := Color(0.55, 1.0, 0.65) if lvl == 0 else Color.lightened(accent, 0.45)
+	var lvl_l := _mk_label(lvl_text, Vector2(w - 58, h - 20), 8, lvl_color, HORIZONTAL_ALIGNMENT_CENTER)
+	lvl_l.size = Vector2(48, 12)
+	root.add_child(lvl_l)
 	# интерактив: наведение — ТОЛЬКО блик рамки и лёгкий прыжок иконки, клик — выбор
 	# (рамки всех карточек всегда строго одного размера!)
 	root.gui_input.connect(func(ev: InputEvent):
@@ -394,15 +403,15 @@ func _build_win() -> void:
 	win_panel.add_child(p)
 
 func _build_pause() -> void:
-	# пауза = СВОЯ панель настроек: всё переключается прямо во время игры (клик/1-3)
-	# (звуковых переключателей больше нет — звук вырезан из игры совсем)
+	# пауза = СВОЯ панель настроек: всё переключается прямо во время игры (клик/1-5)
+	# громкость звука и музыки крутится отдельно (0/25/50/75/100%)
 	pause_panel = Control.new()
 	pause_panel.visible = false
 	add_child(pause_panel)
 	pause_panel.add_child(_dim(Color(0, 0, 0.04, 0.68)))
 	var p := UIPanel.new()
 	p.position = Vector2(143, 50)
-	p.size = Vector2(194, 116)
+	p.size = Vector2(194, 156)
 	p.accent = Color(0.55, 0.8, 1.0)   # ледяная сталь настроек
 	pause_panel.add_child(p)
 	var title := _mk_label("НАСТРОЙКИ", Vector2(143, 58), 12, Color(0.85, 0.95, 1), HORIZONTAL_ALIGNMENT_CENTER)
@@ -412,7 +421,9 @@ func _build_pause() -> void:
 	_mk_setting_row("opt_manual_aim", "Ручная стрельба (ЛКМ)", 80)
 	_mk_setting_row("opt_minimap", "Мини-карта", 100)
 	_mk_setting_row("opt_slowmo", "Слоу-мо боссов", 120)
-	var hint := _mk_label("ESC — назад · клик или 1-3 — переключить", Vector2(143, 146), 8, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
+	_mk_setting_row("sfx_vol", "Громкость звука", 140)
+	_mk_setting_row("music_vol", "Громкость музыки", 160)
+	var hint := _mk_label("ESC — назад · клик или 1-5 — переключить", Vector2(143, 186), 8, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
 	hint.size = Vector2(194, 12)
 	pause_panel.add_child(hint)
 
@@ -468,9 +479,18 @@ func _setting_on(idx: int) -> bool:
 	return false
 
 func _refresh_setting(idx: int) -> void:
-	var on := _setting_on(idx)
 	var rowd: Dictionary = _settings_rows[idx]
 	var l: Label = rowd["state"]
+	var key := String(rowd["key"])
+	if key == "sfx_vol" or key == "music_vol":
+		# громкость показываем процентами, а не ВКЛ/ВЫКЛ
+		var v := SFX.sfx_volume if key == "sfx_vol" else SFX.music_volume
+		l.text = "%d%%" % int(round(v * 100.0))
+		l.label_settings.font_color = Color(0.7, 1, 0.7) if v > 0.001 else Color(1, 0.62, 0.6)
+		rowd["pill"].accent = Color(0.5, 1, 0.5) if v > 0.001 else Color(1, 0.5, 0.5)
+		rowd["pill"].refresh()
+		return
+	var on := _setting_on(idx)
 	l.text = "ВКЛ" if on else "ВЫКЛ"
 	l.label_settings.font_color = Color(0.7, 1, 0.7) if on else Color(1, 0.62, 0.6)
 	rowd["pill"].accent = Color(0.5, 1, 0.5) if on else Color(1, 0.5, 0.5)
@@ -484,6 +504,13 @@ func _toggle_setting(idx: int) -> void:
 		"opt_manual_aim": GameState.opt_manual_aim = not GameState.opt_manual_aim
 		"opt_minimap": GameState.opt_minimap = not GameState.opt_minimap
 		"opt_slowmo": GameState.opt_slowmo = not GameState.opt_slowmo
+		"sfx_vol":
+			var v2 := SFX.sfx_volume + 0.25
+			SFX.set_sfx_volume(0.0 if v2 > 1.001 else v2)
+		"music_vol":
+			var v3 := SFX.music_volume + 0.25
+			SFX.set_music_volume(0.0 if v3 > 1.001 else v3)
+	SFX.play("click", -2.0)
 	_refresh_setting(idx)
 	GameState.save_profile()  # настройки запоминаются между запусками
 
@@ -544,7 +571,8 @@ func _build_menu() -> void:
 	menu_panel.add_child(_dim(Color(0.02, 0.01, 0.06, 0.92)))
 	# живые факелы по бокам + мягкое свечение (аддитив)
 	for tx in [52.0, 428.0]:
-		var glow := _mk_glow(Vector2(tx - 40, 20), 80.0, Color(1, 0.6, 0.28, 0.5))
+		# свечение ровно под огоньком: центр ореола поднят к пламени (был ниже света)
+		var glow := _mk_glow(Vector2(tx - 40, 8), 80.0, Color(1, 0.6, 0.28, 0.5))
 		menu_panel.add_child(glow)
 		var torch := AnimLib.sprite("assets/items/torch", 6.0, true)
 		torch.position = Vector2(tx, 56)
@@ -634,14 +662,16 @@ func _menu_animate(delta: float) -> void:
 		_menu_intro = maxf(0.0, _menu_intro - delta)
 		return  # идёт каскадное появление — твины сами всё двигают
 	var t := _menu_t
-	# заголовок дышит и переливается золотом — плавно и чуть живее
-	menu_title.position.y = 16 + sin(t * 1.7) * 2.2
-	menu_title.label_settings.font_color = Color(1.0, 0.72 + 0.14 * sin(t * 2.7), 0.28 + 0.1 * sin(t * 2.7))
+	# заголовок дышит и переливается золотом — ускорён в 1.5, двойной синус = шелковая плавность
+	menu_title.position.y = 16 + sin(t * 2.55) * 2.0 + sin(t * 5.1) * 0.5
+	menu_title.label_settings.font_color = Color(1.0, 0.72 + 0.14 * sin(t * 4.05), 0.28 + 0.1 * sin(t * 4.05))
 	# подзаголовок тихо мерцает
-	menu_sub.modulate.a = 0.82 + 0.18 * sin(t * 1.4)
-	# панель качается на цепях: органичный двойной синус, плавный и чуть быстрее
-	menu_group.rotation = sin(t * 1.05) * 0.011 + sin(t * 2.1) * 0.004
-	menu_group.position.y = 56 + sin(t * 1.05) * 1.2
+	menu_sub.modulate.a = 0.82 + 0.18 * sin(t * 2.1)
+	# панель качается на цепях: ВДВОЕ быстрее, размах больше, движение ещё и вбок —
+	# всё на чистых синусах, поэтому плавность масляная
+	menu_group.rotation = sin(t * 2.1) * 0.02 + sin(t * 4.2) * 0.007
+	menu_group.position.y = 56 + sin(t * 2.1) * 2.6
+	menu_group.position.x = 145 + sin(t * 1.75) * 1.6
 	# свечения факелов мерцают (в такт мерцающим факелам мира)
 	for i in range(menu_glows.size()):
 		var g: TextureRect = menu_glows[i]
@@ -850,7 +880,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_start_game()
 		elif event.keycode == KEY_ESCAPE:
 			_toggle_pause()
-		elif pause_panel.visible and event.keycode in [KEY_1, KEY_2, KEY_3]:
+		elif pause_panel.visible and event.keycode in [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5]:
 			_toggle_setting(event.keycode - KEY_1)
 		elif levelup_panel.visible and event.keycode in [KEY_1, KEY_2, KEY_3]:
 			_pick(event.keycode - KEY_1)

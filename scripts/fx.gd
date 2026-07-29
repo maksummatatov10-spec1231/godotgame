@@ -3,21 +3,54 @@ extends RefCounted
 ## Одноразовые эффекты: взрывы, брызги, вспышки. Сами исчезают.
 
 static var effects_root: Node2D = null
+# ПУЛ-ЗАГОТОВКИ (идея игрока!): вместо "каждый раз новый объект" эффекты живут
+# в запасниках по папкам и берутся оттуда копиями-переиспользованиями.
+# Сгорел эффект → прячется обратно в запасник, а не умирает. Ноль мусора при шквале!
+static var _pool := {}
+const POOL_MAX_PER_KIND := 24
 
 static func spawn(dir_path: String, pos: Vector2, fps: float = 15.0, scale: float = 1.0, z: int = 60) -> AnimatedSprite2D:
 	if effects_root == null:
 		return null
-	# ОПТИМИЗИРОВАНО (v0.13): бюджет эффектов! Когда на экране мясорубка,
-	# декоративные вспышки сверх лимита просто пропускаем — FPS важнее искр.
-	if effects_root.get_child_count() > 140:
-		return null
-	var s := AnimLib.sprite(dir_path, fps, false)
+	var key := "%s|%0.2f" % [dir_path, fps]
+	var s: AnimatedSprite2D = null
+	if _pool.has(key) and not _pool[key].is_empty():
+		s = _pool[key].pop_back()
+		if not is_instance_valid(s):
+			s = _mk_fx_sprite(key, dir_path, fps)
+	else:
+		# бюджет: когда мясорубка, декоративные вспышки сверх лимита пропускаем
+		if effects_root.get_child_count() > 140:
+			return null
+		s = _mk_fx_sprite(key, dir_path, fps)
+	s.visible = true
+	s.modulate = Color.WHITE
 	s.global_position = pos
 	s.scale = Vector2.ONE * scale
 	s.z_index = z
-	effects_root.add_child(s)
-	s.animation_finished.connect(s.queue_free)
+	s.play("default")
 	return s
+
+## новый спрайт эффекта и сразу подписка на возврат в пул
+static func _mk_fx_sprite(key: String, dir_path: String, fps: float) -> AnimatedSprite2D:
+	var s := AnimLib.sprite(dir_path, fps, false)
+	effects_root.add_child(s)
+	s.animation_finished.connect(_recycle.bind(s, key))
+	return s
+
+## догорел — назад в запасник (не удаляем!)
+static func _recycle(s: AnimatedSprite2D, key: String) -> void:
+	if not is_instance_valid(s):
+		return
+	var list: Array = _pool.get(key, [])
+	if list.size() >= POOL_MAX_PER_KIND:
+		s.queue_free()
+		return
+	s.stop()
+	s.visible = false
+	s.position = Vector2(-10000, -10000)
+	list.append(s)
+	_pool[key] = list
 
 # короткие шорткаты
 static func impact_yellow(pos: Vector2, scale := 0.24) -> void: spawn("assets/effects/impact_yellow", pos, 18.0, scale)

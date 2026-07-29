@@ -69,6 +69,8 @@ static func hostile_shot(projectile_id: String, pos: Vector2, d: Vector2, p_dmg:
 	b.hit_fx_scale = cfg["hit_fx_scale"]
 	b.global_position = pos
 	b.z_index = 11
+	if cfg.get("face_left", false):
+		b.rot_offset = PI  # кадры нарисованы влево (ракета) — разворачиваем по курсу
 	b._sprite = AnimLib.sprite(cfg["dir"], cfg["fps"], true)
 	b.add_child(b._sprite)
 	# свечение вражеских снарядов + кометы шумят при взрыве
