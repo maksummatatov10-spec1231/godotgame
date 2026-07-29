@@ -6,10 +6,10 @@
 ![preview](docs/preview_mockup.png)
 
 ## ▶️ Запуск (3 шага)
-1. Скачай свежий zip из [Releases](https://github.com/maksummatatov10-spec1231/godotgame/releases)
-   (или кнопка **Code → Download ZIP** — `project.godot` лежит прямо в корне).
-2. **Распаковaй** архив полностью в новую папку.
-3. Godot 4.3 → **Импорт** → выбери `project.godot` → **F5**.
+1. Скачай свежий архив из [Releases](https://github.com/maksummatatov10-spec1231/godotgame/releases)
+   (GitHub сам собирает zip тега; работает и кнопка **Code → Download ZIP**).
+2. **Распаковай** архив полностью в новую папку.
+3. Godot 4.3 → **Импорт** → выбери `project.godot` внутри распакованной папки → **F5**.
 
 🎓 **Обучающая сцена:** открой `scenes/demo_map.tscn` и жми **F6** — там живая карта
 с примерами: точки спавна, лут из тайлов, старт героя, своя камера. Подробности — в `TUTORIAL_MAP.md`.

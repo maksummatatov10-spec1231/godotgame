@@ -7,7 +7,8 @@ extends RefCounted
 
 const POOL_SIZE := 12
 const SFX_DIR := "res://assets/sfx/"
-const EXT := [".wav", ".mp3", ".ogg"]
+const EXT: Array[String] = [".wav", ".mp3", ".ogg"]
+const SUFFIXES: Array[String] = ["", "_2", "_3", "_4", "_5"]  # варианты одного звука
 
 # базовая громкость (dB) — подобрана по измеренной громкости файлов:
 # частые звуки тише, редкие и важные — заметнее.
@@ -119,7 +120,7 @@ static func _variants(sname: String) -> Array:
 	if _variants_cache.has(sname):
 		return _variants_cache[sname]
 	var list: Array = []
-	for suffix in ["", "_2", "_3", "_4", "_5"]:
+	for suffix in SUFFIXES:
 		for ext in EXT:
 			var path := SFX_DIR + sname + suffix + ext
 			if ResourceLoader.exists(path):
