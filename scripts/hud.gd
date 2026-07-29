@@ -81,6 +81,19 @@ var _settings_rows := []    # строки переключателей на п�
 var _cards := []
 var _pending_upgrades := []
 var _paused := false
+# кэши значений HUD: строки форматируются ТОЛЬКО при смене (антилаг v0.15 —
+# раньше каждый кадр аллоцировались строки "%d/%d", "%02d:%02d" и т.д.)
+var _c_hp := -1.0
+var _c_maxhp := -1.0
+var _c_xp := -1
+var _c_xpn := -1
+var _c_lvl := -1
+var _c_tsec := -1
+var _c_kills := -1
+var _c_score := -1
+var _c_boss_hp := -1.0
+var _c_boss_name := ""
+var _c_combo := -1
 
 const TEX := "res://assets/ui/fantasy/"
 # фирменный акцент каждой силы — рамка карточки, блик, раскраска
@@ -626,7 +639,7 @@ func _build_menu() -> void:
 	menu_hint = _mk_label("ENTER или клик — В БОЙ!", Vector2(0, 240), 10, Color(0.65, 1, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
 	menu_hint.size = Vector2(480, 16)
 	menu_panel.add_child(menu_hint)
-	var ver := _mk_label("v0.11.2", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
+	var ver := _mk_label("v0.15.0", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
 	ver.size = Vector2(472, 12)
 	menu_panel.add_child(ver)
 	# летящие искры-угольки (аддитивные — красиво светятся в темноте)
@@ -722,30 +735,55 @@ func _process(delta: float) -> void:
 	if menu_panel.visible:
 		_menu_animate(delta)
 	if player and is_instance_valid(player) and not GameState.game_over:
-		hp_bar.value = 100.0 * player.hp / player.max_hp
-		hp_label.text = "%d/%d" % [maxi(0, int(player.hp)), int(player.max_hp)]
-		xp_bar.value = 100.0 * float(player.xp) / float(player.xp_next)
-		level_label.text = "УР %d" % player.level
+		# строки обновляем ТОЛЬКО при смене значения — ноль аллокаций в тишине
+		if player.hp != _c_hp or player.max_hp != _c_maxhp:
+			_c_hp = player.hp
+			_c_maxhp = player.max_hp
+			hp_bar.value = 100.0 * _c_hp / _c_maxhp
+			hp_label.text = "%d/%d" % [maxi(0, int(_c_hp)), int(_c_maxhp)]
+		if player.xp != _c_xp or player.xp_next != _c_xpn:
+			_c_xp = player.xp
+			_c_xpn = player.xp_next
+			xp_bar.value = 100.0 * float(_c_xp) / float(_c_xpn)
+		if player.level != _c_lvl:
+			_c_lvl = player.level
+			level_label.text = "УР %d" % _c_lvl
 		var t := int(GameState.run_time)
-		timer_label.text = "%02d:%02d" % [floori(t / 60.0), t % 60]
+		if t != _c_tsec:
+			_c_tsec = t
+			timer_label.text = "%02d:%02d" % [floori(t / 60.0), t % 60]
 		timer_label.visible = not (levelup_panel.visible or gameover_panel.visible or win_panel.visible or menu_panel.visible)
-		kills_label.text = "%d " % GameState.kills
-		score_label.text = "%d " % GameState.score()
+		if GameState.kills != _c_kills:
+			_c_kills = GameState.kills
+			kills_label.text = "%d " % _c_kills
+		var sc := GameState.score()
+		if sc != _c_score:
+			_c_score = sc
+			score_label.text = "%d " % sc
 	if GameState.current_boss and is_instance_valid(GameState.current_boss):
 		boss_bar.visible = true
 		var b = GameState.current_boss
-		boss_hp.value = 100.0 * b.hp / b.max_hp
-		boss_name.text = Data.BOSSES.get(b.type_name, {}).get("title", "БОСС")
+		if b.hp != _c_boss_hp:
+			_c_boss_hp = b.hp
+			boss_hp.value = 100.0 * b.hp / b.max_hp
+		var bn: String = Data.BOSSES.get(b.type_name, {}).get("title", "БОСС")
+		if bn != _c_boss_name:
+			_c_boss_name = bn
+			boss_name.text = bn
 	else:
 		boss_bar.visible = false
+		_c_boss_hp = -1.0
 	if _flash_t > 0.0:
 		_flash_t -= delta
 		flash_label.modulate.a = clampf(_flash_t, 0.0, 1.0)
 	# комбо-лесенка (растёт от 4 убийств подряд)
 	if GameState.combo >= 4 and not GameState.game_over:
-		combo_label.text = "СЕРИЯ ×%d" % GameState.combo
+		if GameState.combo != _c_combo:
+			_c_combo = GameState.combo
+			combo_label.text = "СЕРИЯ ×%d" % _c_combo
 		combo_label.modulate.a = 0.7 + 0.3 * sin(GameState.run_time * 8.0)
-	else:
+	elif _c_combo != 0:
+		_c_combo = 0
 		combo_label.text = ""
 	# мини-карта: видна только в бою и если включена в настройках
 	var want_mm := GameState.opt_minimap and not menu_panel.visible and not gameover_panel.visible

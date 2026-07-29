@@ -2,6 +2,36 @@ class_name FX
 extends RefCounted
 ## Одноразовые эффекты: взрывы, брызги, вспышки. Сами исчезают.
 
+## Цифры урона из пула (антилаг v0.15): раньше КАЖДОЕ попадание порождало
+## новый Label + LabelSettings + Tween — при мясорубке это десятки объектов
+## в секунду и микрофризы от работы сборщика. Теперь — постоянный пул лейблов,
+## которые сами себя анимируют в _process: ноль аллокаций за удар.
+class DmgLabel extends Label:
+	const LIFE := 0.55
+	var age := 0.0
+
+	func _ready() -> void:
+		z_index = 80
+		visible = false
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func fire(pos: Vector2, amount: int, ls: LabelSettings) -> void:
+		text = str(amount)
+		label_settings = ls
+		global_position = pos
+		modulate.a = 1.0
+		age = 0.0
+		visible = true
+
+	func _process(delta: float) -> void:
+		if not visible:
+			return
+		age += delta
+		global_position.y -= 24.0 * delta
+		modulate.a = clampf(1.0 - age / LIFE, 0.0, 1.0)
+		if age >= LIFE:
+			visible = false
+
 static var effects_root: Node2D = null
 # ПУЛ-ЗАГОТОВКИ (идея игрока!): вместо "каждый раз новый объект" эффекты живут
 # в запасниках по папкам и берутся оттуда копиями-переиспользованиями.
@@ -69,26 +99,45 @@ static func heart_burst(pos: Vector2, scale := 0.6) -> void: spawn("assets/effec
 static func smoke(pos: Vector2, scale := 0.5, z := 60) -> void: spawn("assets/effects/smoke_burst", pos, 15.0, scale, z)
 static func cast(pos: Vector2) -> void: spawn("assets/bullets/cast", pos, 14.0, 0.8, 15)
 
-# всплывающие цифры урона/лечения
+# всплывающие цифры урона/лечения — ПУЛ (переиспользуем, не создаём заново)
+static var _dmg_labels: Array = []
+const DMG_LABEL_MAX := 26
+static var _ls_dmg: LabelSettings = null
+static var _ls_crit: LabelSettings = null
+static var _ls_heal: LabelSettings = null
+
+static func _mk_dmg_ls(size: int, color: Color) -> LabelSettings:
+	var ls := LabelSettings.new()
+	ls.font_size = size
+	ls.font_color = color
+	ls.outline_size = 3 if size >= 13 else 2
+	ls.outline_color = Color(0.1, 0.0, 0.1)
+	return ls
+
 static func damage_number(pos: Vector2, amount: int, color := Color(1.0, 0.9, 0.3), crit := false) -> void:
 	if effects_root == null:
 		return
-	var l := Label.new()
-	l.text = str(amount)
-	l.z_index = 80
-	var ls := LabelSettings.new()
-	ls.font_size = 13 if crit else 9
-	ls.font_color = Color(1.0, 0.45, 0.85) if crit else color  # крит — ярко-розовый и крупный
-	ls.outline_size = 3 if crit else 2
-	ls.outline_color = Color(0.1, 0.0, 0.1)
-	l.label_settings = ls
-	l.global_position = pos + Vector2(randf_range(-6.0, 6.0), -14.0)
-	effects_root.add_child(l)
-	var tw := l.create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(l, "global_position:y", l.global_position.y - 12.0, 0.5)
-	tw.tween_property(l, "modulate:a", 0.0, 0.55)
-	tw.chain().tween_callback(l.queue_free)
+	if _ls_dmg == null:
+		_ls_dmg = _mk_dmg_ls(9, Color(1.0, 0.9, 0.3))
+		_ls_crit = _mk_dmg_ls(13, Color(1.0, 0.45, 0.85))  # крит — ярко-розовый и крупный
+		_ls_heal = _mk_dmg_ls(9, Color(0.4, 1.0, 0.4))
+	var ls := _ls_crit if crit else (_ls_heal if color == Color(0.4, 1.0, 0.4) else _ls_dmg)
+	# вычищаем мусор от прошлой сцены (после рестарта ссылки мертвы)
+	for i in range(_dmg_labels.size() - 1, -1, -1):
+		if not is_instance_valid(_dmg_labels[i]):
+			_dmg_labels.remove_at(i)
+	var l: DmgLabel = null
+	for d in _dmg_labels:
+		if not (d as DmgLabel).visible:
+			l = d
+			break
+	if l == null:
+		if _dmg_labels.size() >= DMG_LABEL_MAX:
+			return  # тотальная мясорубка: лишние цифры просто не рисуем — кадр важнее
+		l = DmgLabel.new()
+		_dmg_labels.append(l)
+		effects_root.add_child(l)
+	l.fire(pos + Vector2(randf_range(-6.0, 6.0), -14.0), amount, ls)
 
 static func heal_number(pos: Vector2, amount: int) -> void:
 	damage_number(pos, amount, Color(0.4, 1.0, 0.4))

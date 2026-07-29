@@ -124,9 +124,13 @@ func _ready() -> void:
 	bullets_node = _mk("Bullets", 0, 11)
 	FX.effects_root = effects_node
 	_collect_markers()
-	_scan_user_layers()   # оживляем тайлы с твоего декор-слоя
+	_scan_user_layers()   # оживляем тайлы с твоего декор-слоя (двери регистрируются тут)
 	if GameState.arena and GameState.arena.painted_default:
 		_decorate()       # дефолтный декор — только для дефолтной арены
+	# быстрая байтовая карта проходимости — после покраски и дверей (антилаг v0.15)
+	GameState.setup_walk_grid()
+	# фоновая предзагрузка ВСЕХ ресурсов мелкими порциями — конец фризам при спавне
+	Warmup.attach(self)
 	# игрок
 	player = Player.new()
 	GameState.player = player
@@ -559,21 +563,23 @@ var _sep_phase := 0
 
 func _separate_enemies() -> void:
 	_sep_phase = 1 - _sep_phase
-	var n := enemies_node.get_child_count()
+	# идём по РЕЕСТРУ врагов (массив уже есть — get_child на каждую пару не нужен)
+	var list := GameState.enemies
+	var n := list.size()
 	var pl := GameState.player
 	var pc := pl.global_position if pl != null and is_instance_valid(pl) else Vector2.ZERO
 	const FAR2 := 420.0 * 420.0
 	for i in range(n):
-		var a := enemies_node.get_child(i) as Enemy
-		# защита от случайных "не-врагов" в узле + кружащихся по орбите не растаскиваем
-		if a == null or a.dead or a.is_boss or a.mini_boss or a.orbit_t > 0.0:
+		var a := list[i] as Enemy
+		# защита от случайных "не-врагов" + кружащихся по орбите не растаскиваем
+		if a == null or not is_instance_valid(a) or a.dead or a.is_boss or a.mini_boss or a.orbit_t > 0.0:
 			continue
 		var a_far := a.global_position.distance_squared_to(pc) > FAR2
 		for j in range(i + 1, n):
 			if ((i + j) & 1) != _sep_phase:
 				continue
-			var b := enemies_node.get_child(j) as Enemy
-			if b == null or b.dead or b.is_boss or b.mini_boss or b.orbit_t > 0.0:
+			var b := list[j] as Enemy
+			if b == null or not is_instance_valid(b) or b.dead or b.is_boss or b.mini_boss or b.orbit_t > 0.0:
 				continue
 			if a_far and b.global_position.distance_squared_to(pc) > FAR2:
 				continue

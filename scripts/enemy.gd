@@ -41,6 +41,10 @@ var _phase_t := 0.0         # переход фазы: неуязвимость
 var _summon_cd := 6.0       # босс-демон призывает прислугу
 var _splash_acc := 0.0      # босс в фазе 2: накопление урона для ответки
 var _split_child := false   # детёныш кровавой твари (дальше не делится)
+var _sf_memo := {}          # локальный кэш SpriteFrames по имени анимации (антилаг v0.15)
+
+# высота процедурного шага по типам (константа — НЕ создаём словарь каждый кадр!)
+const HOP := {"goblin": 2.2, "skull": 1.1, "dark_rogue": 2.4, "shieldknight": 0.5, "necromancer": 0.7}
 
 static func create(p_type: String, p_elite := false) -> Enemy:
 	var e := Enemy.new()
@@ -215,10 +219,14 @@ func _update_spawn_intro(delta: float) -> void:
 			FX.sparkle(global_position, 0.35)
 
 func _play(key: String) -> void:
-	if not cfg.has(key):
-		return
-	var a: Array = cfg[key]
-	var sf := AnimLib.frames(cfg["dir"] + "/" + a[0], a[1], key == "move_anim")
+	# локальный кэш: в горячем цикле не форматируем строку ключа каждый кадр
+	var sf: SpriteFrames = _sf_memo.get(key, null)
+	if sf == null:
+		if not cfg.has(key):
+			return
+		var a: Array = cfg[key]
+		sf = AnimLib.frames(cfg["dir"] + "/" + a[0], a[1], key == "move_anim")
+		_sf_memo[key] = sf
 	if sprite.sprite_frames == sf and sprite.is_playing():
 		return
 	sprite.sprite_frames = sf
@@ -363,7 +371,7 @@ func _process(delta: float) -> void:
 	if dist < cfg["attack_range"] + 4.0:
 		_touch_damage()
 	elif not _attacking:
-		_hop = {"goblin": 2.2, "skull": 1.1, "dark_rogue": 2.4, "shieldknight": 0.5, "necromancer": 0.7}.get(type_name, 0.8)
+		_hop = HOP.get(type_name, 0.8)  # конста-словарь: ноль аллокаций на кадр
 		var speed_val: float = cfg["speed"]
 		if mini_boss:
 			# чемпион шагает тяжело, но на половине HP впадает в ярость

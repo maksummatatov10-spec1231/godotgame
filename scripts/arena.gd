@@ -36,6 +36,11 @@ func is_walkable(world_pos: Vector2) -> bool:
 		return false  # закрытая дверь — стена и для героя, и для врагов, и для снарядов
 	return not WALL_ROWS.has(ac.y)
 
+## клетка проходима по тайлам? (без учёта дверей — их добавляет сетка GameState)
+func grid_cell_walkable(cell: Vector2i) -> bool:
+	var ac := get_cell_atlas_coords(cell)
+	return ac != Vector2i(-1, -1) and not WALL_ROWS.has(ac.y)
+
 func _map_rect() -> Rect2:
 	var u := get_used_rect()
 	if u.size == Vector2i.ZERO:

@@ -67,6 +67,7 @@ func _open(arena: TileMapLayer, world: Vector2) -> void:
 	_stage = 2
 	arena.set_cell(cell, 0, DEBRIS.get(closed_tile, Vector2i(5, 1)))
 	GameState.closed_doors.erase(cell)
+	GameState.set_walkable(cell, true)  # обновляем быстрый кэш проходимости
 	if _by_enemy:
 		SFX.play_at("doorbreak", world, 0.0)   # грохот позиционный: вдали — тихий
 	else:

@@ -111,10 +111,61 @@ func reset() -> void:
 	combo = 0
 	combo_t = 0.0
 	corpses = []
+	walk_w = 0   # сетка проходимости недействительна до setup_walk_grid новой сцены
+
+# ---------- КЭШ ПРОХОДИМОСТИ (антилаг v0.15) ----------
+# Раньше КАЖДЫЙ is_walkable дёргал TileMapLayer (local_to_map + atlas-координаты)
+# по 5 раз на врага за кадр — при толпе в 60+ мобов это сотни нативных вызовов/кадр.
+# Теперь карта проходимости — плоский байтовый массив: проверка = одно чтение.
+var walk_layer := Vector2.ZERO   # где стоит узел арены в мире
+var walk_origin := Vector2i.ZERO # координаты первой клетки карты (в клетках)
+var walk_w := 0
+var walk_h := 0
+var walk_grid := PackedByteArray()
+
+## строится main'ом ПОСЛЕ покраски карты и регистрации дверей
+func setup_walk_grid() -> void:
+	walk_w = 0
+	if arena == null:
+		return
+	var u: Rect2i = arena.get_used_rect()
+	if u.size.x <= 0 or u.size.y <= 0:
+		return
+	walk_origin = u.position
+	walk_w = u.size.x
+	walk_h = u.size.y
+	walk_layer = arena.global_position
+	walk_grid = PackedByteArray()
+	walk_grid.resize(walk_w * walk_h)
+	for y in range(walk_h):
+		for x in range(walk_w):
+			var cell := Vector2i(walk_origin.x + x, walk_origin.y + y)
+			walk_grid[y * walk_w + x] = 1 if arena.grid_cell_walkable(cell) else 0
+	# закрытые двери — стены (вскроются позже через set_walkable)
+	for cell in closed_doors:
+		set_walkable(cell, false)
+
+## дверь открылась (или ломаем клетку): обновить одну клетку кэша
+func set_walkable(cell: Vector2i, ok: bool) -> void:
+	if walk_w <= 0:
+		return
+	var lx := cell.x - walk_origin.x
+	var ly := cell.y - walk_origin.y
+	if lx < 0 or ly < 0 or lx >= walk_w or ly >= walk_h:
+		return
+	walk_grid[ly * walk_w + lx] = 1 if ok else 0
 
 # ---------- ДВИЖЕНИЕ С ОБХОДОМ СТЕН (коллизии по клеткам TileMap) ----------
 
 func is_walkable(pos: Vector2) -> bool:
+	# быстрый путь: байтовая карта проходимости (самый горячий вызов игры!)
+	if walk_w > 0 and walk_grid.size() == walk_w * walk_h:
+		var lx := int(floor((pos.x - walk_layer.x) / 16.0)) - walk_origin.x
+		var ly := int(floor((pos.y - walk_layer.y) / 16.0)) - walk_origin.y
+		if lx < 0 or ly < 0 or lx >= walk_w or ly >= walk_h:
+			return false
+		return walk_grid[ly * walk_w + lx] == 1
+	# запасной путь: как раньше, напрямую по тайлмапу
 	if arena == null:
 		return play_rect.has_point(pos)
 	return arena.is_walkable(pos)
