@@ -1,9 +1,11 @@
 class_name SFX
 extends RefCounted
-## Звуковая система v2: ВСЕ эффекты синтезированы кодом специально для игры
-## (мягкие, приятные уху, без клипов; 22050 Гц моно). Музыка — файлы, которые
-## делает игрок на генераторе; если файла нет — просто тишина, БЕЗ ошибок.
-## Громкость эффектов и музыки настраивается в паузе (живёт в профиле).
+## Звуковая система v3: ВСЕ эффекты синтезированы кодом специально для игры
+## (мягкие, приятные уху, без клипов; 22050 Гц моно). Музыка — файлы игрока.
+## ЗАГРУЗКА БЕЗ ИМПОРТА: файлы читаются напрямую байтами (FileAccess), поэтому
+## треки можно бросать в assets/sfx когда угодно — даже посреди забега, Godot
+## НЕ требует импорта и ошибок не печатает в принципе (битый/чужой формат —
+## просто молчим). Громкость эффектов и музыки настраивается в паузе.
 
 const POOL_SIZE := 14
 const SFX_DIR := "res://assets/sfx/"
@@ -14,6 +16,8 @@ static var _idx := 0
 static var _music: AudioStreamPlayer = null
 static var _music_name := ""
 static var _variants_cache := {}
+static var _retry_at := {}         # когда можно перепроверить "отсутствующий" файл
+const RETRY_MISSING_MS := 1500     # докинутый в папку трек подхватится за ~1.5 сек
 # громкость 0..1 (настройки на паузе бегают с шагом 25%); музыка тише эффектов
 static var sfx_volume := 0.75
 static var music_volume := 0.45
@@ -55,18 +59,100 @@ static func attach(root: Node) -> void:
 	_music.process_mode = Node.PROCESS_MODE_ALWAYS
 	root.add_child(_music)
 
-## только первый файл по имени (вариантов больше нет — всё синтезировано одиночно)
+## найти/собрать поток по имени. WAV/OGG/MP3 читаем БАЙТАМИ без импорта —
+## ни одной ошибки движка: чужой/битый файл просто отдаёт null (игра молчит)
 static func _find(sname: String) -> AudioStream:
 	if _variants_cache.has(sname):
-		return _variants_cache[sname]
+		var got: AudioStream = _variants_cache[sname]
+		if got != null:
+			return got
+		# файла не было — перепроверяем не чаще раза в 1.5 сек (а вдруг докинули?)
+		if int(_retry_at.get(sname, 0)) > Time.get_ticks_msec():
+			return null
+		_retry_at[sname] = Time.get_ticks_msec() + RETRY_MISSING_MS
 	var stream: AudioStream = null
 	for ext in EXT:
 		var path := SFX_DIR + sname + ext
-		if ResourceLoader.exists(path):
-			stream = load(path)
+		if not FileAccess.file_exists(path):
+			continue
+		match ext:
+			".wav":
+				stream = _load_wav(path)
+			".ogg":
+				stream = _load_ogg(path)
+			".mp3":
+				stream = _load_mp3(path)
+		if stream != null:
 			break
 	_variants_cache[sname] = stream
 	return stream
+
+## WAV собираем вручную по байтам RIFF: читаем fmt/data-чанки сами,
+## полностью независимо от импортёра движка. Только PCM 8/16 бит (наши такие).
+static func _load_wav(path: String) -> AudioStreamWAV:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.size() < 44:
+		return null
+	if bytes[0] != 0x52 or bytes[1] != 0x49 or bytes[2] != 0x46 or bytes[3] != 0x46:
+		return null   # нет "RIFF"
+	if bytes[8] != 0x57 or bytes[9] != 0x41 or bytes[10] != 0x56 or bytes[11] != 0x45:
+		return null   # нет "WAVE"
+	var pos := 12
+	var audio_format := 0
+	var channels := 0
+	var rate := 0
+	var bits := 0
+	var data_start := -1
+	var data_size := 0
+	while pos + 8 <= bytes.size():
+		var cid := bytes.slice(pos, pos + 4).get_string_from_ascii()
+		var csize := bytes.decode_s32(pos + 4)
+		if csize < 0:
+			return null
+		if cid == "fmt ":
+			audio_format = bytes.decode_u16(pos + 8)
+			channels = bytes.decode_u16(pos + 10)
+			rate = bytes.decode_u32(pos + 12)
+			bits = bytes.decode_u16(pos + 22)
+		elif cid == "data":
+			data_start = pos + 8
+			data_size = mini(csize, bytes.size() - data_start)
+			break
+		pos += 8 + csize + (csize & 1)   # чанки выровнены по 2 байта
+	if audio_format != 1 or data_start < 0 or data_size <= 0 or (bits != 8 and bits != 16) \
+			or rate <= 0 or channels <= 0:
+		return null   # не обычный PCM (float/adpcm) или битый заголовок — молча пропускаем
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS if bits == 16 else AudioStreamWAV.FORMAT_8_BITS
+	w.stereo = channels > 1
+	w.mix_rate = rate
+	w.data = bytes.slice(data_start, data_start + data_size)
+	if w.get_length() <= 0.0:
+		return null
+	return w
+
+## MP3: проверяем магию (ID3-тег или старт кадра), потом отдаём байты декодеру.
+## Если сайт выдал НЕ mp3 под именем .mp3 — молча вернём null, а не ошибку.
+static func _load_mp3(path: String) -> AudioStreamMP3:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.size() < 8:
+		return null
+	var is_id3 := bytes[0] == 0x49 and bytes[1] == 0x44 and bytes[2] == 0x33  # "ID3"
+	var is_sync := bytes[0] == 0xFF and (bytes[1] & 0xE0) == 0xE0             # mp3-кадр
+	if not is_id3 and not is_sync:
+		return null
+	var m := AudioStreamMP3.new()
+	m.data = bytes
+	if m.get_length() <= 0.01:
+		return null
+	return m
+
+## OGG: читаем байты сами (магия "OggS"), декодируем из буфера — без импорта.
+static func _load_ogg(path: String) -> AudioStreamOggVorbis:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.size() < 4 or bytes[0] != 0x4F or bytes[1] != 0x67 or bytes[2] != 0x67 or bytes[3] != 0x53:
+		return null   # нет "OggS"
+	return AudioStreamOggVorbis.load_from_buffer(bytes)
 
 static func _db(vol01: float) -> float:
 	if vol01 <= 0.001:
