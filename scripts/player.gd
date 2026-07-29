@@ -359,5 +359,6 @@ func _die() -> void:
 	_dead = true
 	FX.explosion(global_position, 1.0)
 	FX.smoke_skull(global_position, 0.9)
+	SFX.play("player_die", -1.0)   # драматичный падени-звук поверх взрыва
 	sprite.visible = false
 	died_player.emit()
