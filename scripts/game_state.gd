@@ -8,6 +8,32 @@ var play_rect := Rect2(50, 66, 924, 448)   # играбельная зона (к
 var player: Node2D = null
 var player_name := "ГЕРОЙ"   # задаётся в главном меню (живёт между рестартами)
 
+# ---------- СОХРАНЕНИЕ ПРОФИЛЯ (ник + настройки — между запусками игры!) ----------
+const SAVE_PATH := "user://dungeon_survivors.cfg"
+
+## записать ник и все переключатели настроек на диск
+func save_profile() -> void:
+	var c := ConfigFile.new()
+	c.set_value("profile", "player_name", player_name)
+	c.set_value("settings", "opt_manual_aim", opt_manual_aim)
+	c.set_value("settings", "opt_minimap", opt_minimap)
+	c.set_value("settings", "opt_slowmo", opt_slowmo)
+	c.set_value("settings", "sfx", SFX.enabled)
+	c.set_value("settings", "music", SFX.music_enabled)
+	c.save(SAVE_PATH)
+
+## прочитать ник и настройки (вызывается main при запуске, до постройки HUD)
+func load_profile() -> void:
+	var c := ConfigFile.new()
+	if c.load(SAVE_PATH) != OK:
+		return
+	player_name = str(c.get_value("profile", "player_name", "ГЕРОЙ"))
+	opt_manual_aim = bool(c.get_value("settings", "opt_manual_aim", false))
+	opt_minimap = bool(c.get_value("settings", "opt_minimap", true))
+	opt_slowmo = bool(c.get_value("settings", "opt_slowmo", true))
+	SFX.enabled = bool(c.get_value("settings", "sfx", true))
+	SFX.set_music_enabled(bool(c.get_value("settings", "music", true)))
+
 # ---------- НАСТРОЙКИ (переключаются на паузе, живут между забегами) ----------
 var opt_manual_aim := false  # ручная стрельба мышью (зажми ЛКМ и целься)
 var opt_minimap := true      # мини-карта в углу

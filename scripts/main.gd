@@ -109,6 +109,7 @@ func _decor_with_light(anim_path: String, pos: Vector2) -> AnimatedSprite2D:
 
 func _ready() -> void:
 	GameState.reset()
+	GameState.load_profile()  # ник и настройки с прошлого запуска
 	SFX.attach(self)  # звуки и музыка (assets/sfx)
 	# обучающая сцена (demo_map.tscn) идёт под свою спокойную музыку
 	var scn := get_tree().current_scene
@@ -132,22 +133,15 @@ func _ready() -> void:
 	add_child(player)
 	player.leveled_up.connect(_on_level_up)
 	player.died_player.connect(_on_player_died)
-	# камера: подхватываем твою Camera2D, если добавил в сцену, иначе создаём свою
+	# камера: своя, НЕ привязана к герою жёстко — плавно догоняет его в _process
 	camera = _find_camera()
 	if camera == null:
 		camera = Camera2D.new()
-		player.add_child(camera)
-	elif camera.get_parent() != player:
-		camera.reparent(player)
-		camera.position = Vector2.ZERO
-	camera.position_smoothing_enabled = true
-	camera.position_smoothing_speed = camera_smooth
+		add_child(camera)
+	elif camera.get_parent() != self:
+		camera.reparent(self)
+	camera.position = player.global_position
 	camera.zoom = Vector2(camera_zoom, camera_zoom)
-	# границы камеры = играбельная зона + 1.5 тайла стен вокруг
-	camera.limit_left = int(GameState.play_rect.position.x) - 24
-	camera.limit_top = int(GameState.play_rect.position.y) - 24
-	camera.limit_right = int(GameState.play_rect.end.x) + 24
-	camera.limit_bottom = int(GameState.play_rect.end.y) + 24
 	camera.make_current()
 	# HUD
 	hud = preload("res://scripts/hud.gd").new()
@@ -169,6 +163,26 @@ func _find_camera() -> Camera2D:
 	for n in find_children("*", "Camera2D", true, false):
 		return n as Camera2D
 	return null
+
+## камера мягко идёт за героем и не вылезает за края играбельной зоны
+func _update_camera(delta: float) -> void:
+	if camera == null:
+		return
+	var target := player.global_position if (player and is_instance_valid(player)) else GameState.play_rect.get_center()
+	var pos2 := camera.global_position.lerp(target, minf(1.0, delta * camera_smooth))
+	# кламп: полэкрана от краёв (если карта меньше экрана — держим её центр)
+	var hw := 240.0 / camera_zoom
+	var hh := 135.0 / camera_zoom
+	var pr := GameState.play_rect.grow(24.0)
+	if pr.size.x > hw * 2.0:
+		pos2.x = clampf(pos2.x, pr.position.x + hw, pr.end.x - hw)
+	else:
+		pos2.x = pr.get_center().x
+	if pr.size.y > hh * 2.0:
+		pos2.y = clampf(pos2.y, pr.position.y + hh, pr.end.y - hh)
+	else:
+		pos2.y = pr.get_center().y
+	camera.global_position = pos2
 
 # ---------------- ТОЧКИ/МАРКЕРЫ ИЗ РЕДАКТОРА ----------------
 
@@ -267,6 +281,7 @@ func _decorate() -> void:
 		decor_node.add_child(mc)
 
 func _process(delta: float) -> void:
+	_update_camera(delta)
 	# мерцание огня факелов/свечей (живое пламя!)
 	if not _flickers.is_empty():
 		var t := Time.get_ticks_msec() / 1000.0
@@ -454,7 +469,8 @@ func _skull_ring() -> void:
 	var type := "skull" if GameState.minutes < 3.0 else ("goblin" if randf() < 0.5 else "skull")
 	for i in range(n):
 		var e := _spawn_enemy(type, Vector2.ZERO)
-		e.global_position = GameState.random_walkable_near(player.global_position, 130.0, 170.0, 12.0)
+		# тесное кольцо теней: кружат ВПЛОТНУЮ к герою (в 3 раза ближе, вдвое медленнее)
+		e.global_position = GameState.random_walkable_near(player.global_position, 42.0, 60.0, 12.0)
 		e.orbit_r = e.global_position.distance_to(player.global_position)  # радиус зафиксирован
 		e.orbit_t = 3.2 + randf() * 0.6  # сначала кружат по орбите, потом бросаются!
 	FX.sparkle(player.global_position, 1.1)

@@ -310,15 +310,17 @@ func _card(i: int, u: Dictionary) -> Control:
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(icon)
-	# название: центр, до двух строк, в цвет акцента
-	var t := _mk_label(u["name"], Vector2(4, 54), 9, accent.lightened(0.35), HORIZONTAL_ALIGNMENT_CENTER)
-	t.size = Vector2(w - 8, 24)
+	# название: центр, до двух строк, в цвет акцента (обрезается строго по рамке)
+	var t := _mk_label(u["name"], Vector2(3, 52), 8, accent.lightened(0.35), HORIZONTAL_ALIGNMENT_CENTER)
+	t.size = Vector2(w - 6, 26)
 	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	t.clip_text = true
 	root.add_child(t)
-	# описание: полностью видно, светлый мелкий текст
-	var d := _mk_label(u["desc"], Vector2(6, 80), 8, Color(0.93, 0.9, 0.97), HORIZONTAL_ALIGNMENT_CENTER)
-	d.size = Vector2(w - 12, 34)
+	# описание: полностью видно, мелкий светлый текст (строго по рамке)
+	var d := _mk_label(u["desc"], Vector2(5, 80), 7, Color(0.93, 0.9, 0.97), HORIZONTAL_ALIGNMENT_CENTER)
+	d.size = Vector2(w - 10, 36)
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.clip_text = true
 	root.add_child(d)
 	# цифра клавиши — мини-панелька внизу карточки
 	var chip := UIPanel.new()
@@ -469,6 +471,7 @@ func _toggle_setting(idx: int) -> void:
 		"music": SFX.set_music_enabled(not SFX.music_enabled)
 	SFX.play("click", -2.0)
 	_refresh_setting(idx)
+	GameState.save_profile()  # настройки запоминаются между запусками
 
 # ---------- ГЛАВНОЕ МЕНЮ (ник вводится ВНИЗУ) ----------
 # Красивости: затемнение, пульсирующий заголовок, живые факелы с аддитивным
@@ -554,12 +557,9 @@ func _build_menu() -> void:
 	var hints := _mk_label("WASD/стрелки — движение\nSPACE — рывок!\n1/2/3 — выбор силы\nESC — пауза, настройки", Vector2(0, 12), 9, Color(0.95, 0.9, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
 	hints.size = Vector2(190, 48)
 	menu_group.add_child(hints)
-	# поле ника — внизу панели, как просил
-	var nick_lbl := _mk_label("НИК ГЕРОЯ (над головой):", Vector2(0, 62), 8, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
-	nick_lbl.size = Vector2(190, 12)
-	menu_group.add_child(nick_lbl)
+	# поле ника — сразу, без лишних надписей (ник запоминается между запусками)
 	nick_edit = LineEdit.new()
-	nick_edit.position = Vector2(20, 76)
+	nick_edit.position = Vector2(20, 70)
 	nick_edit.size = Vector2(150, 20)
 	nick_edit.max_length = 14
 	nick_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -584,7 +584,7 @@ func _build_menu() -> void:
 	menu_hint = _mk_label("ENTER или клик — В БОЙ!", Vector2(0, 240), 10, Color(0.65, 1, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
 	menu_hint.size = Vector2(480, 16)
 	menu_panel.add_child(menu_hint)
-	var ver := _mk_label("v0.11.0", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
+	var ver := _mk_label("v0.11.1", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
 	ver.size = Vector2(472, 12)
 	menu_panel.add_child(ver)
 	# летящие искры-угольки (аддитивные — красиво светятся в темноте)
@@ -661,6 +661,7 @@ func show_menu() -> void:
 func _start_game() -> void:
 	var nick := nick_edit.text.strip_edges()
 	GameState.player_name = nick if nick != "" else "ГЕРОЙ"
+	GameState.save_profile()  # ник сохранён — в следующий раз уже введён
 	menu_panel.visible = false
 	get_tree().paused = false
 	SFX.play("click", -2.0)

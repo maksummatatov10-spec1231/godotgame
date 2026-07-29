@@ -276,7 +276,7 @@ func _process(delta: float) -> void:
 		if orbit_r < 1.0:
 			orbit_r = maxf(120.0, off.length())
 		var base_d := off.normalized() if off.length() > 1.0 else Vector2.RIGHT
-		global_position = p.global_position + base_d.rotated(delta * 2.4) * orbit_r
+		global_position = p.global_position + base_d.rotated(delta * 1.2) * orbit_r
 		sprite.flip_h = p.global_position.x < global_position.x
 		_step_t += delta * 9.0
 		sprite.position.y = -absf(sin(_step_t)) * 1.2
