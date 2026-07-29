@@ -455,6 +455,7 @@ func _skull_ring() -> void:
 	for i in range(n):
 		var e := _spawn_enemy(type, Vector2.ZERO)
 		e.global_position = GameState.random_walkable_near(player.global_position, 130.0, 170.0, 12.0)
+		e.orbit_r = e.global_position.distance_to(player.global_position)  # радиус зафиксирован
 		e.orbit_t = 3.2 + randf() * 0.6  # сначала кружат по орбите, потом бросаются!
 	FX.sparkle(player.global_position, 1.1)
 	hud.flash("КОЛЬЦО ТЕНЕЙ!", 1.6)
@@ -515,11 +516,11 @@ func _separate_enemies() -> void:
 	var n := arr.size()
 	for i in range(n):
 		var a: Enemy = arr[i]
-		if a.dead or a.is_boss:
-			continue
+		if a.dead or a.is_boss or a.orbit_t > 0.0:
+			continue  # кружащихся по орбите не растаскиваем — им радиус дороже
 		for j in range(i + 1, n):
 			var b: Enemy = arr[j]
-			if b.dead or b.is_boss:
+			if b.dead or b.is_boss or b.orbit_t > 0.0:
 				continue
 			var d := a.global_position - b.global_position
 			var dist := d.length()

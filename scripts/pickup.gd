@@ -13,9 +13,12 @@ var _flying := false
 var _opened := false
 var _bob_t := 0.0
 var _life := 0.0
+var _toss_t := 0.0       # >0: выпархивает из трупа/сундука дугой
+var _toss_v := Vector2.ZERO
 
 const DESPAWN_AT := 46.0   # сек жизни мелкого лута (сундуки вечные)
 const BLINK_AT := 36.0     # начало мигания "я скоро пропаду!"
+const TOSS_T := 0.42       # длительность выпархивания
 
 static func spawn(kind_name: String, pos: Vector2) -> Pickup:
 	var p := Pickup.new()
@@ -66,6 +69,10 @@ static func spawn(kind_name: String, pos: Vector2) -> Pickup:
 		p.arrow.z_index = 7
 		p.add_child(p.arrow)
 	GameState.pickups.append(p)
+	# выброс из тела врага/сундука: дугой разлетается в стороны и падает рядом
+	if kind_name != "chest" and kind_name != "mini_chest":
+		p._toss_t = TOSS_T
+		p._toss_v = Vector2.from_angle(randf() * TAU) * randf_range(50.0, 92.0)
 	return p
 
 func is_chest() -> bool:
@@ -85,6 +92,19 @@ func _process(delta: float) -> void:
 	elif arrow:
 		arrow.position.y = -46 + sin(_life * 4.0) * 3.0  # стрелка приглашает
 		arrow.rotation = sin(_life * 4.0) * 0.12
+	# выпархивание: короткий полёт с дугой, стены гасят полёт, приземлился — лежит
+	if _toss_t > 0.0:
+		_toss_t -= delta
+		_toss_v = _toss_v.move_toward(Vector2.ZERO, 300.0 * delta)
+		var np := global_position + _toss_v * delta
+		if GameState.is_walkable(np):
+			global_position = np
+		else:
+			_toss_v = Vector2.ZERO
+		sprite.position.y = -sin(clampf(1.0 - _toss_t / TOSS_T, 0.0, 1.0) * PI) * 7.0
+		if _toss_t <= 0.0:
+			sprite.position.y = 0.0
+		return
 	var pl := GameState.player
 	if pl == null or not is_instance_valid(pl):
 		return

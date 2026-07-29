@@ -1,6 +1,46 @@
 extends CanvasLayer
-## HUD на UI-паке FantasyUIfree: драконьи хп/опыт-бары, висячие доски-карточки,
-## деревянные плашки, сферы счётчиков. View-порт 480x270.
+## HUD: драконьи хп/опыт-бары и сферы из пака FantasyUIfree (игроку нравятся — оставлены),
+## а панели/карточки/кнопки — СОБСТВЕННЫЕ: рисуются кодом с пиксельной рамкой
+## и тёплым шейдером блика (shaders/ui_warm.gdshader). View-порт 480x270.
+
+## Наша панель: пиксельная рамка с заклёпками по углам + шейдер блика/свечения.
+class UIPanel extends Control:
+	var accent := Color(1.0, 0.8, 0.35)
+	var fill := Color(0.07, 0.045, 0.11, 0.97)
+	var _mat: ShaderMaterial
+
+	func _init() -> void:
+		_mat = ShaderMaterial.new()
+		_mat.shader = load("res://shaders/ui_warm.gdshader")
+		material = _mat
+
+	func _ready() -> void:
+		refresh()
+
+	## применить акцент в рисунок и шейдер (вызвать после смены accent)
+	func refresh() -> void:
+		_mat.set_shader_parameter("accent", accent)
+		queue_redraw()
+
+	## 0..1 — подсветка при наведении
+	func set_hover(v: float) -> void:
+		_mat.set_shader_parameter("hover", v)
+
+	func _draw() -> void:
+		var r := Rect2(Vector2.ZERO, size)
+		# мягкая тень под панелью
+		draw_rect(Rect2(Vector2(3, 4), size), Color(0, 0, 0, 0.5), true)
+		# тело
+		draw_rect(r, fill, true)
+		# внешняя тёмная рамка 2px
+		draw_rect(r, accent.darkened(0.72), false, 2.0)
+		# внутренняя яркая нить
+		var inner := Rect2(Vector2(3, 3), size - Vector2(6, 6))
+		draw_rect(inner, Color(accent.lightened(0.2), 0.8), false, 1.0)
+		# заклёпки-уголки 2px
+		for c in [Vector2(2, 2), Vector2(size.x - 4, 2), Vector2(2, size.y - 4), Vector2(size.x - 4, size.y - 4)]:
+			draw_rect(Rect2(c, Vector2(2, 2)), accent.lightened(0.35), true)
+
 
 var player: Node2D
 var main: Node
@@ -42,11 +82,16 @@ var _pending_upgrades := []
 var _paused := false
 
 const TEX := "res://assets/ui/fantasy/"
-# тематический значок + мини-значок из UI-пака на доске карточки
-const UPGRADE_BADGES := {
-	"dart_rate": "icon_circle", "dart_dmg": "icon_plus", "dart_count": "icon_pause",
-	"slash": "icon_x", "boots": "arrow_wood", "heart": "vial_red",
-	"magnet": "icon_dollar", "regen": "vial_green",
+# фирменный акцент каждой силы — рамка карточки, блик, раскраска
+const UPGRADE_ACCENTS := {
+	"dart_rate": Color(1.0, 0.60, 0.25),  # пылающие руны — огонь
+	"dart_dmg": Color(1.0, 0.42, 0.35),   # урон — красный
+	"dart_count": Color(0.75, 0.55, 1.0), # больше дротиков — фиолет
+	"slash": Color(0.45, 0.85, 1.0),      # полумесяц — ледяная сталь
+	"boots": Color(0.55, 1.0, 0.60),      # сапоги — ветер
+	"heart": Color(1.0, 0.45, 0.55),      # сердце — рубин
+	"magnet": Color(1.0, 0.85, 0.35),     # магнит — золото
+	"regen": Color(0.65, 1.0, 0.50),      # реген — живая зелень
 }
 
 func _ready() -> void:
@@ -89,8 +134,8 @@ func bind(p: Node2D) -> void:
 
 # ---------- ХЕЛПЕРЫ ----------
 
-func _tex(name: String) -> Texture2D:
-	return load(TEX + name + ".png")
+func _tex(fname: String) -> Texture2D:
+	return load(TEX + fname + ".png")
 
 func _mk_label(text: String, pos: Vector2, size: int, color: Color, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
 	var l := Label.new()
@@ -103,11 +148,12 @@ func _mk_label(text: String, pos: Vector2, size: int, color: Color, align := HOR
 	ls.outline_size = 2
 	ls.outline_color = Color(0, 0, 0, 0.8)
 	l.label_settings = ls
+	l.use_parent_material = false  # наш шейдер блика — только на панель, текст чист
 	return l
 
-func _mk_tex(name: String, pos: Vector2) -> TextureRect:
+func _mk_tex(fname: String, pos: Vector2) -> TextureRect:
 	var t := TextureRect.new()
-	t.texture = _tex(name)
+	t.texture = _tex(fname)
 	t.position = pos
 	t.stretch_mode = TextureRect.STRETCH_KEEP
 	return t
@@ -140,10 +186,9 @@ func _build_bars() -> void:
 	level_label = _mk_label("УР 1", Vector2(8, 49), 9, Color(0.75, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
 	level_label.size = Vector2(112, 12)
 	add_child(level_label)
-	# таймер на деревянной плашке по центру сверху
-	add_child(_mk_tex("plate_wide_x2", Vector2(195, 2)))
-	timer_label = _mk_label("00:00", Vector2(195, 20), 13, Color(1, 0.95, 0.75), HORIZONTAL_ALIGNMENT_CENTER)
-	timer_label.size = Vector2(90, 20)
+	# таймер — просто чёткая цифра по центру сверху (без плашки: больше не загораживает)
+	timer_label = _mk_label("00:00", Vector2(195, 4), 13, Color(1, 0.93, 0.7), HORIZONTAL_ALIGNMENT_CENTER)
+	timer_label.size = Vector2(90, 18)
 	add_child(timer_label)
 	# счётчики на сферах справа
 	add_child(_mk_tex("orb_fire", Vector2(447, 4)))
@@ -224,76 +269,81 @@ func _build_levelup() -> void:
 	levelup_panel.visible = false
 	add_child(levelup_panel)
 	levelup_panel.add_child(_dim(Color(0.03, 0, 0.06, 0.72)))
-	var title := _mk_label("УРОВЕНЬ ВЫРОС — ВЫБЕРИ СИЛУ", Vector2(0, 22), 13, Color(1, 0.85, 0.3), HORIZONTAL_ALIGNMENT_CENTER)
+	var title := _mk_label("УРОВЕНЬ ВЫРОС — ВЫБЕРИ СИЛУ", Vector2(0, 12), 14, Color(1, 0.85, 0.3), HORIZONTAL_ALIGNMENT_CENTER)
 	title.size = Vector2(480, 20)
 	levelup_panel.add_child(title)
-	# склянки-покровители по бокам заголовка (UI-пак)
-	var vb := TextureRect.new()
-	vb.texture = _tex("vial_blue_x2")
-	vb.position = Vector2(88, 16)
-	levelup_panel.add_child(vb)
-	var vr := TextureRect.new()
-	vr.texture = _tex("vial_white_x2")
-	vr.position = Vector2(370, 16)
-	levelup_panel.add_child(vr)
+	var sub := _mk_label("клик или клавиши 1 · 2 · 3", Vector2(0, 33), 9, Color(0.72, 0.82, 1.0), HORIZONTAL_ALIGNMENT_CENTER)
+	sub.size = Vector2(480, 12)
+	levelup_panel.add_child(sub)
 
+## наша карточка силы: акцентная панель с бликом, свечение иконки, чёткий текст
 func _card(i: int, u: Dictionary) -> Control:
-	# висячая деревянная доска из UI-пака
+	var accent: Color = UPGRADE_ACCENTS.get(u["id"], Color(1.0, 0.8, 0.35))
+	var w := 112
+	var h := 140
 	var root := Control.new()
-	var w := 71
-	var h := 112
-	root.position = Vector2(119 + i * (w + 14), 46)
+	root.position = Vector2(58 + i * (w + 14), 50)
 	root.size = Vector2(w, h)
-	var bg := TextureRect.new()
-	bg.texture = _tex("board_tall")
-	bg.size = Vector2(w, h)
-	root.add_child(bg)
-	# иконка улучшения (игровой спрайт)
+	root.pivot_offset = Vector2(w / 2.0, h / 2.0)
+	var p := UIPanel.new()
+	p.size = Vector2(w, h)
+	p.accent = accent
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(p)
+	# мягкий ореол за иконкой в цвет силы (аддитивное свечение)
+	var halo := TextureRect.new()
+	halo.texture = load("res://assets/fx/light_warm.png")
+	halo.position = Vector2(24, 2)
+	halo.size = Vector2(64, 64)
+	halo.modulate = Color(accent, 0.45)
+	var cm := CanvasItemMaterial.new()
+	cm.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	halo.material = cm
+	halo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(halo)
+	# иконка силы
 	var icon := TextureRect.new()
 	icon.texture = load(u["icon"])
-	icon.position = Vector2(19, 22)
-	icon.size = Vector2(32, 32)
+	icon.position = Vector2(38, 12)
+	icon.size = Vector2(36, 36)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(icon)
-	# мини-значок из UI-пака на плече доски
-	var badge_name: String = UPGRADE_BADGES.get(u["id"], "icon_question")
-	var badge := TextureRect.new()
-	badge.texture = _tex(badge_name)
-	if badge_name == "arrow_wood":
-		badge.position = Vector2(52, 6)
-		badge.scale = Vector2.ONE * 0.5
-	else:
-		badge.position = Vector2(50, 12)
-	root.add_child(badge)
-	# текст
-	var t := _mk_label(u["name"], Vector2(0, 56), 9, Color(1, 0.82, 0.45), HORIZONTAL_ALIGNMENT_CENTER)
-	t.size = Vector2(w, 12)
+	# название: центр, до двух строк, в цвет акцента
+	var t := _mk_label(u["name"], Vector2(4, 54), 9, accent.lightened(0.35), HORIZONTAL_ALIGNMENT_CENTER)
+	t.size = Vector2(w - 8, 24)
 	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(t)
-	var d := _mk_label(u["desc"], Vector2(3, 68), 7, Color(0.92, 0.88, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
-	d.size = Vector2(w - 6, 22)
+	# описание: полностью видно, светлый мелкий текст
+	var d := _mk_label(u["desc"], Vector2(6, 80), 8, Color(0.93, 0.9, 0.97), HORIZONTAL_ALIGNMENT_CENTER)
+	d.size = Vector2(w - 12, 34)
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(d)
-	# плашка-подсказка с номером клавиши
-	var chip := TextureRect.new()
-	chip.texture = _tex("plate_small")
-	chip.position = Vector2(19, 88)
+	# цифра клавиши — мини-панелька внизу карточки
+	var chip := UIPanel.new()
+	chip.size = Vector2(24, 14)
+	chip.position = Vector2(w / 2.0 - 12, h - 22)
+	chip.accent = accent
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(chip)
-	var hint := _mk_label(str(i + 1), Vector2(19, 94), 9, Color(0.55, 1, 0.55), HORIZONTAL_ALIGNMENT_CENTER)
-	hint.size = Vector2(32, 12)
+	var hint := _mk_label(str(i + 1), Vector2(w / 2.0 - 12, h - 21), 9, Color(1, 1, 1), HORIZONTAL_ALIGNMENT_CENTER)
+	hint.size = Vector2(24, 12)
 	root.add_child(hint)
-	# интерактив
+	# интерактив: наведение — рост и блик, клик — выбор
 	root.gui_input.connect(func(ev: InputEvent):
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
 			_pick(i)
 	)
 	root.mouse_entered.connect(func():
-		root.scale = Vector2.ONE * 1.06
-		root.pivot_offset = Vector2(w / 2.0, h / 2.0)
+		var hw := root.create_tween()
+		hw.tween_property(root, "scale", Vector2.ONE * 1.07, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		p.set_hover(1.0)
 	)
 	root.mouse_exited.connect(func():
-		root.scale = Vector2.ONE
+		var hw := root.create_tween()
+		hw.tween_property(root, "scale", Vector2.ONE, 0.15)
+		p.set_hover(0.0)
 	)
 	return root
 
@@ -302,73 +352,93 @@ func _build_gameover() -> void:
 	gameover_panel.visible = false
 	add_child(gameover_panel)
 	gameover_panel.add_child(_dim(Color(0.04, 0, 0, 0.8)))
-	# висячая доска 2x по центру
-	var board := TextureRect.new()
-	board.texture = _tex("board_tall_x2")
-	board.position = Vector2(169, 20)
-	gameover_panel.add_child(board)
+	# СВОЯ панель по центру (рубиновый акцент смерти)
+	var p := UIPanel.new()
+	p.position = Vector2(131, 36)
+	p.size = Vector2(218, 196)
+	p.accent = Color(1.0, 0.42, 0.45)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gameover_panel.add_child(p)
 
 func _build_win() -> void:
 	win_panel = Control.new()
 	win_panel.visible = false
 	add_child(win_panel)
 	win_panel.add_child(_dim(Color(0.06, 0.05, 0, 0.65)))
-	var board := TextureRect.new()
-	board.texture = _tex("board_short_x2")
-	board.position = Vector2(169, 42)
-	win_panel.add_child(board)
+	# СВОЯ панель по центру (золото победы)
+	var p := UIPanel.new()
+	p.position = Vector2(131, 42)
+	p.size = Vector2(218, 184)
+	p.accent = Color(1.0, 0.82, 0.35)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	win_panel.add_child(p)
 
 func _build_pause() -> void:
-	# пауза = панель НАСТРОЕК: всё переключается прямо во время игры (клик/1-5)
+	# пауза = СВОЯ панель настроек: всё переключается прямо во время игры (клик/1-5)
 	pause_panel = Control.new()
 	pause_panel.visible = false
 	add_child(pause_panel)
 	pause_panel.add_child(_dim(Color(0, 0, 0.04, 0.68)))
-	var board := TextureRect.new()
-	board.texture = _tex("board_short_x2")
-	board.position = Vector2(169, 34)
-	pause_panel.add_child(board)
-	var title := _mk_label("НАСТРОЙКИ", Vector2(169, 40), 12, Color(1, 0.88, 0.4), HORIZONTAL_ALIGNMENT_CENTER)
-	title.size = Vector2(142, 16)
+	var p := UIPanel.new()
+	p.position = Vector2(143, 50)
+	p.size = Vector2(194, 156)
+	p.accent = Color(0.55, 0.8, 1.0)   # ледяная сталь настроек
+	pause_panel.add_child(p)
+	var title := _mk_label("НАСТРОЙКИ", Vector2(143, 58), 12, Color(0.85, 0.95, 1), HORIZONTAL_ALIGNMENT_CENTER)
+	title.size = Vector2(194, 14)
 	pause_panel.add_child(title)
 	_settings_rows.clear()
-	_mk_setting_row("opt_manual_aim", "Ручная стрельба (ЛКМ)", 62)
-	_mk_setting_row("opt_minimap", "Мини-карта", 80)
-	_mk_setting_row("opt_slowmo", "Слоу-мо боссов", 98)
-	_mk_setting_row("sfx", "Звуковые эффекты", 116)
-	_mk_setting_row("music", "Музыка", 134)
-	var hint := _mk_label("ESC — назад · клик или 1-5 — переключить", Vector2(0, 162), 9, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
-	hint.size = Vector2(480, 14)
+	_mk_setting_row("opt_manual_aim", "Ручная стрельба (ЛКМ)", 80)
+	_mk_setting_row("opt_minimap", "Мини-карта", 100)
+	_mk_setting_row("opt_slowmo", "Слоу-мо боссов", 120)
+	_mk_setting_row("sfx", "Звуковые эффекты", 140)
+	_mk_setting_row("music", "Музыка", 160)
+	var hint := _mk_label("ESC — назад · клик или 1-5 — переключить", Vector2(143, 186), 8, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
+	hint.size = Vector2(194, 12)
 	pause_panel.add_child(hint)
-	var pi := TextureRect.new()
-	pi.texture = _tex("icon_pause_x2")
-	pi.position = Vector2(226, 182)
-	pause_panel.add_child(pi)
 
-## строка-переключатель настроек: [иконка] название ... ВКЛ/ВЫКЛ (кликается!)
+## строка-переключатель настроек: [№] название ... {таблетка ВКЛ/ВЫКЛ}
 func _mk_setting_row(key: String, text: String, y: float) -> void:
 	var idx := _settings_rows.size()
 	var row := Control.new()
-	row.position = Vector2(177, y)
-	row.size = Vector2(126, 16)
+	row.position = Vector2(153, y)
+	row.size = Vector2(174, 16)
 	pause_panel.add_child(row)
-	var bg := ColorRect.new()
-	bg.size = Vector2(126, 16)
-	bg.color = Color(1, 1, 1, 0.0)
-	row.add_child(bg)
-	var name_l := _mk_label("%d. %s" % [idx + 1, text], Vector2(2, 2), 8, Color(0.92, 0.88, 0.95))
-	name_l.size = Vector2(96, 12)
+	# номер клавиши — мини-панелька
+	var chip := UIPanel.new()
+	chip.size = Vector2(14, 14)
+	chip.position = Vector2(0, 1)
+	chip.accent = Color(0.55, 0.8, 1.0)
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(chip)
+	var num := _mk_label(str(idx + 1), Vector2(0, 2), 8, Color(1, 1, 1), HORIZONTAL_ALIGNMENT_CENTER)
+	num.size = Vector2(14, 12)
+	row.add_child(num)
+	var name_l := _mk_label(text, Vector2(20, 2), 8, Color(0.92, 0.9, 0.96))
+	name_l.size = Vector2(108, 12)
 	row.add_child(name_l)
-	var state_l := _mk_label("ВКЛ", Vector2(98, 2), 8, Color(0.55, 1, 0.55), HORIZONTAL_ALIGNMENT_CENTER)
-	state_l.size = Vector2(26, 12)
+	# таблетка состояния (зелёная/красная)
+	var pill := UIPanel.new()
+	pill.size = Vector2(44, 14)
+	pill.position = Vector2(130, 1)
+	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(pill)
+	var state_l := _mk_label("ВКЛ", Vector2(130, 2), 8, Color(0.75, 1, 0.75), HORIZONTAL_ALIGNMENT_CENTER)
+	state_l.size = Vector2(44, 12)
 	row.add_child(state_l)
 	row.gui_input.connect(func(ev: InputEvent):
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
 			_toggle_setting(idx)
 	)
-	row.mouse_entered.connect(func(): bg.color = Color(1, 1, 0.8, 0.12))
-	row.mouse_exited.connect(func(): bg.color = Color(1, 1, 1, 0.0))
-	_settings_rows.append({"key": key, "state": state_l})
+	row.mouse_entered.connect(func():
+		name_l.label_settings.font_color = Color(1, 0.95, 0.6)
+		pill.set_hover(0.7)
+	)
+	row.mouse_exited.connect(func():
+		name_l.label_settings.font_color = Color(0.92, 0.9, 0.96)
+		pill.set_hover(0.0)
+	)
+	_settings_rows.append({"key": key, "state": state_l, "pill": pill, "name": name_l})
 	_refresh_setting(idx)
 
 func _setting_on(idx: int) -> bool:
@@ -382,9 +452,12 @@ func _setting_on(idx: int) -> bool:
 
 func _refresh_setting(idx: int) -> void:
 	var on := _setting_on(idx)
-	var l: Label = _settings_rows[idx]["state"]
+	var rowd: Dictionary = _settings_rows[idx]
+	var l: Label = rowd["state"]
 	l.text = "ВКЛ" if on else "ВЫКЛ"
-	l.label_settings.font_color = Color(0.55, 1, 0.55) if on else Color(0.9, 0.45, 0.45)
+	l.label_settings.font_color = Color(0.7, 1, 0.7) if on else Color(1, 0.62, 0.6)
+	rowd["pill"].accent = Color(0.5, 1, 0.5) if on else Color(1, 0.5, 0.5)
+	rowd["pill"].refresh()
 
 ## переключить настройку: мгновенно применяется, не снимая паузу
 func _toggle_setting(idx: int) -> void:
@@ -399,8 +472,39 @@ func _toggle_setting(idx: int) -> void:
 
 # ---------- ГЛАВНОЕ МЕНЮ (ник вводится ВНИЗУ) ----------
 # Красивости: затемнение, пульсирующий заголовок, живые факелы с аддитивным
-# свечением, качающаяся висячая доска, летящие искры (светятся в режиме ADD),
+# свечением, качающаяся СВОЯ панель, летящие искры (светятся в режиме ADD),
 # каскадное появление элементов твинами.
+
+## наша кнопка: панель с бликом + текст; наведение — рост и свечение кромки
+func _mk_button(text: String, pos: Vector2, bsize: Vector2, accent: Color, cb: Callable) -> Control:
+	var btn := Control.new()
+	btn.position = pos
+	btn.size = bsize
+	btn.pivot_offset = bsize / 2.0
+	var p := UIPanel.new()
+	p.size = bsize
+	p.accent = accent
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(p)
+	var l := _mk_label(text, Vector2.ZERO, 13, Color(1, 0.93, 0.62), HORIZONTAL_ALIGNMENT_CENTER)
+	l.size = bsize
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	btn.add_child(l)
+	btn.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			cb.call()
+	)
+	btn.mouse_entered.connect(func():
+		var hw := btn.create_tween()
+		hw.tween_property(btn, "scale", Vector2.ONE * 1.06, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		p.set_hover(1.0)
+	)
+	btn.mouse_exited.connect(func():
+		var hw := btn.create_tween()
+		hw.tween_property(btn, "scale", Vector2.ONE, 0.14)
+		p.set_hover(0.0)
+	)
+	return btn
 
 ## аддитивное свечение из мягкого радиального градиента (текстура света факелов)
 func _mk_glow(pos: Vector2, size: float, color: Color) -> TextureRect:
@@ -436,34 +540,35 @@ func _build_menu() -> void:
 	menu_sub = _mk_label("пиксельный данжен-survivor · Godot 4.3", Vector2(0, 42), 9, Color(0.78, 0.72, 0.88), HORIZONTAL_ALIGNMENT_CENTER)
 	menu_sub.size = Vector2(480, 14)
 	menu_panel.add_child(menu_sub)
-	# висячая доска-группа (качается как табличка на цепях): подсказки, ник, кнопка
+	# СВОЯ висячая панель (качается как табличка на цепях): подсказки, ник, кнопка
 	menu_group = Control.new()
-	menu_group.position = Vector2(169, 52)
-	menu_group.size = Vector2(142, 178)
-	menu_group.pivot_offset = Vector2(71, 0)
+	menu_group.position = Vector2(145, 56)
+	menu_group.size = Vector2(190, 172)
+	menu_group.pivot_offset = Vector2(95, 0)
 	menu_panel.add_child(menu_group)
-	var board := TextureRect.new()
-	board.texture = _tex("board_short_x2")
-	board.size = Vector2(142, 178)
-	board.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	menu_group.add_child(board)
+	var mp := UIPanel.new()
+	mp.size = Vector2(190, 172)
+	mp.accent = Color(1.0, 0.78, 0.32)   # золото главного меню
+	mp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu_group.add_child(mp)
 	var hints := _mk_label("WASD/стрелки — движение\nSPACE — рывок!\n1/2/3 — выбор силы\nESC — пауза, настройки", Vector2(0, 12), 9, Color(0.95, 0.9, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
-	hints.size = Vector2(142, 52)
+	hints.size = Vector2(190, 48)
 	menu_group.add_child(hints)
-	# поле ника — внизу доски, как просил
-	var nick_lbl := _mk_label("НИК ГЕРОЯ (над головой):", Vector2(0, 68), 8, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
-	nick_lbl.size = Vector2(142, 12)
+	# поле ника — внизу панели, как просил
+	var nick_lbl := _mk_label("НИК ГЕРОЯ (над головой):", Vector2(0, 62), 8, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
+	nick_lbl.size = Vector2(190, 12)
 	menu_group.add_child(nick_lbl)
 	nick_edit = LineEdit.new()
-	nick_edit.position = Vector2(13, 82)
-	nick_edit.size = Vector2(116, 20)
+	nick_edit.position = Vector2(20, 76)
+	nick_edit.size = Vector2(150, 20)
 	nick_edit.max_length = 14
 	nick_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	nick_edit.placeholder_text = "ГЕРОЙ"
 	nick_edit.text = GameState.player_name
+	nick_edit.use_parent_material = false
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.05, 0.12)
-	sb.border_color = Color(0.55, 0.4, 0.2)
+	sb.bg_color = Color(0.06, 0.04, 0.10)
+	sb.border_color = Color(0.72, 0.55, 0.25)
 	sb.set_border_width_all(2)
 	sb.set_corner_radius_all(3)
 	sb.content_margin_left = 6.0
@@ -472,30 +577,14 @@ func _build_menu() -> void:
 	nick_edit.add_theme_color_override("font_color", Color(0.9, 1, 1))
 	nick_edit.text_submitted.connect(func(_t: String): _start_game())
 	menu_group.add_child(nick_edit)
-	# кнопка ИГРАТЬ на деревянной плашке в самом низу доски
-	var btn := Control.new()
-	btn.position = Vector2(26, 112)
-	btn.size = Vector2(90, 58)
+	# кнопка ИГРАТЬ — наша, с бликом и отскоком
+	var btn := _mk_button("ИГРАТЬ", Vector2(47, 106), Vector2(96, 30), Color(0.65, 1, 0.6), Callable(self, "_start_game"))
 	menu_group.add_child(btn)
-	var bpl := TextureRect.new()
-	bpl.texture = _tex("plate_wide_x2")
-	bpl.size = Vector2(90, 58)
-	bpl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	btn.add_child(bpl)
-	var bl := _mk_label("ИГРАТЬ", Vector2(0, 14), 13, Color(1, 0.9, 0.5), HORIZONTAL_ALIGNMENT_CENTER)
-	bl.size = Vector2(90, 20)
-	btn.add_child(bl)
-	btn.gui_input.connect(func(ev: InputEvent):
-		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-			_start_game()
-	)
-	btn.mouse_entered.connect(func(): bl.label_settings.font_color = Color(0.6, 1, 0.6))
-	btn.mouse_exited.connect(func(): bl.label_settings.font_color = Color(1, 0.9, 0.5))
 	# мигающая подсказка под доской
 	menu_hint = _mk_label("ENTER или клик — В БОЙ!", Vector2(0, 240), 10, Color(0.65, 1, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
 	menu_hint.size = Vector2(480, 16)
 	menu_panel.add_child(menu_hint)
-	var ver := _mk_label("v0.10.1", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
+	var ver := _mk_label("v0.11.0", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
 	ver.size = Vector2(472, 12)
 	menu_panel.add_child(ver)
 	# летящие искры-угольки (аддитивные — красиво светятся в темноте)
@@ -553,7 +642,7 @@ func show_menu() -> void:
 	menu_title.position = Vector2(0, -26)
 	menu_title.modulate.a = 0.0
 	menu_sub.modulate.a = 0.0
-	menu_group.position = Vector2(169, 30)
+	menu_group.position = Vector2(145, 34)
 	menu_group.modulate.a = 0.0
 	menu_hint.modulate.a = 0.0
 	for g in menu_glows:
@@ -563,7 +652,7 @@ func show_menu() -> void:
 	tw.tween_property(menu_title, "position", Vector2(0, 16), 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(menu_title, "modulate:a", 1.0, 0.3)
 	tw.tween_property(menu_sub, "modulate:a", 1.0, 0.4).set_delay(0.25)
-	tw.tween_property(menu_group, "position", Vector2(169, 52), 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_delay(0.15)
+	tw.tween_property(menu_group, "position", Vector2(145, 56), 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_delay(0.15)
 	tw.tween_property(menu_group, "modulate:a", 1.0, 0.35).set_delay(0.15)
 	tw.tween_property(menu_hint, "modulate:a", 1.0, 0.4).set_delay(0.6)
 	for i in range(menu_glows.size()):
@@ -590,6 +679,7 @@ func _process(delta: float) -> void:
 		level_label.text = "УР %d" % player.level
 		var t := int(GameState.run_time)
 		timer_label.text = "%02d:%02d" % [floori(t / 60.0), t % 60]
+		timer_label.visible = not (levelup_panel.visible or gameover_panel.visible or win_panel.visible or menu_panel.visible)
 		kills_label.text = "%d " % GameState.kills
 		score_label.text = "%d " % GameState.score()
 	if GameState.current_boss and is_instance_valid(GameState.current_boss):
@@ -643,6 +733,14 @@ func show_levelup(upgrades: Array) -> void:
 		var c := _card(i, upgrades[i])
 		levelup_panel.add_child(c)
 		_cards.append(c)
+		# каскадное выпархивание карточек сверху с отскоком
+		c.modulate.a = 0.0
+		var fy: float = c.position.y
+		c.position.y = fy - 14
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(c, "modulate:a", 1.0, 0.22).set_delay(0.05 + i * 0.08)
+		tw.tween_property(c, "position:y", fy, 0.30).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_delay(0.05 + i * 0.08)
 	levelup_panel.visible = true
 
 func _pick(i: int) -> void:
@@ -653,63 +751,64 @@ func _pick(i: int) -> void:
 	main.on_upgrade_picked(_pending_upgrades[i]["id"])
 
 func show_game_over() -> void:
-	# символы из гигапака поверх доски
+	# символы из гигапака поверх нашей рубиновой панели
 	var txt := AnimLib.sprite("assets/ui/game_over_text", 15.0, true)
-	txt.position = Vector2(240, 92)
+	txt.position = Vector2(240, 64)
 	txt.scale = Vector2.ONE * 0.7
 	gameover_panel.add_child(txt)
 	var rank_id: String = GameState.rank()
 	var rank := AnimLib.sprite("assets/ui/rank_" + rank_id, 15.0, true)
-	rank.position = Vector2(240, 138)
+	rank.position = Vector2(240, 98)
 	rank.scale = Vector2.ONE * 0.65
 	gameover_panel.add_child(rank)
 	var t := int(GameState.run_time)
-	# мини-статистика забега с иконками из UI-пака
-	_mk_stat_row(gameover_panel, "icon_x", "Убийств: %d · Ур: %d" % [GameState.kills, player.level], 166)
-	_mk_stat_row(gameover_panel, "icon_pause", "Время: %02d:%02d" % [floori(t / 60.0), t % 60], 180)
-	_mk_stat_row(gameover_panel, "arrow_wood", "Путь: %d м" % int(GameState.dist_traveled / 16.0), 194)
+	# мини-статистика забега с иконками
+	_mk_stat_row(gameover_panel, "icon_x", "Убийств: %d · Ур: %d" % [GameState.kills, player.level], 126)
+	_mk_stat_row(gameover_panel, "icon_pause", "Время: %02d:%02d" % [floori(t / 60.0), t % 60], 140)
+	_mk_stat_row(gameover_panel, "arrow_wood", "Путь: %d м" % int(GameState.dist_traveled / 16.0), 154)
 	var fav := "Полумесяц" if GameState.slashes_used > GameState.darts_fired else "Дротики"
 	var acc := int(100.0 * GameState.shots_hit / maxf(1.0, float(GameState.darts_fired)))
-	_mk_stat_row(gameover_panel, "icon_circle", "%s · Точность %d%%" % [fav, acc], 208)
-	var rank_lbl := _mk_label("РАНГ: " + rank_id, Vector2(0, 224), 10, Color(1, 0.85, 0.3), HORIZONTAL_ALIGNMENT_CENTER)
+	_mk_stat_row(gameover_panel, "icon_circle", "%s · Точность %d%%" % [fav, acc], 168)
+	var rank_lbl := _mk_label("РАНГ: " + rank_id, Vector2(0, 190), 10, Color(1, 0.85, 0.3), HORIZONTAL_ALIGNMENT_CENTER)
 	rank_lbl.size = Vector2(480, 16)
 	gameover_panel.add_child(rank_lbl)
-	var hint := _mk_label("R — заново", Vector2(0, 244), 10, Color(0.55, 1, 0.55), HORIZONTAL_ALIGNMENT_CENTER)
+	var hint := _mk_label("R — заново", Vector2(0, 208), 10, Color(0.55, 1, 0.55), HORIZONTAL_ALIGNMENT_CENTER)
 	hint.size = Vector2(480, 14)
 	gameover_panel.add_child(hint)
 	gameover_panel.visible = true
 
-## строка статистики: иконка слева + текст (на доске смерти)
+## строка статистики: иконка слева + текст (по центру нашей панели)
 func _mk_stat_row(panel: Control, icon_name: String, text: String, y: float) -> void:
 	var ic := TextureRect.new()
 	ic.texture = _tex(icon_name)
-	ic.position = Vector2(192, y)
+	ic.position = Vector2(164, y)
 	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ic.use_parent_material = false
 	if icon_name == "arrow_wood":
 		ic.scale = Vector2.ONE * 0.3
 		ic.rotation = -PI / 2.0  # стрелка вперёд-вниз = пройденный путь
 		ic.pivot_offset = Vector2(8, 26)
 	panel.add_child(ic)
-	var l := _mk_label(text, Vector2(212, y + 2), 8, Color(0.95, 0.9, 0.9))
-	l.size = Vector2(100, 12)
+	var l := _mk_label(text, Vector2(186, y + 2), 8, Color(0.95, 0.9, 0.9))
+	l.size = Vector2(130, 12)
 	panel.add_child(l)
 
 func show_win() -> void:
-	# наполняем доску победы
+	# наполняем нашу золотую панель победы
 	var txt := AnimLib.sprite("assets/ui/complete_text", 15.0, true)
-	txt.position = Vector2(240, 102)
+	txt.position = Vector2(240, 76)
 	txt.scale = Vector2.ONE * 0.7
 	win_panel.add_child(txt)
 	var crown := AnimLib.sprite("assets/ui/crown", 15.0, true)
-	crown.position = Vector2(240, 134)
+	crown.position = Vector2(240, 108)
 	crown.scale = Vector2.ONE * 0.42
 	win_panel.add_child(crown)
 	var rank_id: String = GameState.rank()
 	var rank := AnimLib.sprite("assets/ui/rank_" + rank_id, 15.0, true)
-	rank.position = Vector2(240, 162)
+	rank.position = Vector2(240, 142)
 	rank.scale = Vector2.ONE * 0.5
 	win_panel.add_child(rank)
-	var hint := _mk_label("ENTER — продолжить в режиме ва-банк", Vector2(0, 226), 10, Color(0.6, 1, 0.6), HORIZONTAL_ALIGNMENT_CENTER)
+	var hint := _mk_label("ENTER — продолжить в режиме ва-банк", Vector2(0, 200), 10, Color(0.6, 1, 0.6), HORIZONTAL_ALIGNMENT_CENTER)
 	hint.size = Vector2(480, 18)
 	win_panel.add_child(hint)
 	win_panel.visible = true

@@ -30,6 +30,7 @@ var thief := false          # разбойник-вор: крадёт монет
 var golden := false         # золотая элитка (дроп x3)
 var berserk := false        # красный берсерк-скелет: серия из 3 ударов
 var orbit_t := 0.0          # >0: летит по орбите вокруг героя (кольцо теней)
+var orbit_r := 0.0          # радиус орбиты — ЗАФИКСИРОВАН, иначе растаскивание разносит кольцо
 var _carried: AnimatedSprite2D = null  # украденная монета над головой
 var _revive_cd := 5.0       # некромант: кулдаун воскрешения
 var _blink_cd := 0.0        # вампир: кулдаун блинка
@@ -268,10 +269,14 @@ func _process(delta: float) -> void:
 	# вампир: кулдаун блинка-исчезновения
 	if _blink_cd > 0.0:
 		_blink_cd -= delta
-	# кольцо теней: враг кружит вокруг героя по орбите
+	# кольцо теней: враг кружит вокруг героя по орбите (радиус зафиксирован!)
 	if orbit_t > 0.0:
 		orbit_t -= delta
-		global_position = p.global_position + (global_position - p.global_position).rotated(delta * 2.4)
+		var off := global_position - p.global_position
+		if orbit_r < 1.0:
+			orbit_r = maxf(120.0, off.length())
+		var base_d := off.normalized() if off.length() > 1.0 else Vector2.RIGHT
+		global_position = p.global_position + base_d.rotated(delta * 2.4) * orbit_r
 		sprite.flip_h = p.global_position.x < global_position.x
 		_step_t += delta * 9.0
 		sprite.position.y = -absf(sin(_step_t)) * 1.2

@@ -38,6 +38,8 @@ var _dash_cd := 0.0
 var _iframes := 0.0
 var _regen_acc := 0.0
 var _walk_t := 0.0
+var _fr_idle: SpriteFrames   # покой
+var _fr_move: SpriteFrames   # бег (кадры сшиты из пикселей героя)
 var _step_t := 0.0
 var _step_snd_t := 0.0
 var _dead := false
@@ -66,6 +68,9 @@ func _ready() -> void:
 	add_child(body)
 	sprite = AnimLib.sprite("assets/player/pyro/idle", 3.0, true)
 	body.add_child(sprite)
+	# кадры ходьбы: сшиты из НАСТОЯЩИХ пикселей idle-кадров (подол «шагает», рука качается)
+	_fr_idle = AnimLib.frames("assets/player/pyro/idle", 3.0, true)
+	_fr_move = AnimLib.frames("assets/player/pyro/move", 10.0, true)
 	# контур: синий -> постепенно краснеет с каждым уровнем (отличить героя от врагов)
 	outline_mat = ShaderMaterial.new()
 	outline_mat.shader = load("res://shaders/outline.gdshader")
@@ -118,8 +123,11 @@ func _process(delta: float) -> void:
 		global_position = GameState.slide_move(global_position, dir * speed * delta, 6.0)
 		GameState.dist_traveled += global_position.distance_to(before)
 		sprite.flip_h = dir.x < 0.0
-		sprite.speed_scale = 2.6   # быстрый переступ двух кадров = "шагаем"
-		# процедурная "ходьба": покачивание, присяд в такт, наклон (в паках нет walk-кадров героя)
+		if sprite.sprite_frames != _fr_move:
+			sprite.sprite_frames = _fr_move  # настоящие кадры бега
+			sprite.play("default")
+		sprite.speed_scale = 1.0
+		# поверх кадров — живая пружина: покачивание, присяд в такт, наклон
 		_walk_t += delta * 11.0
 		sprite.position.y = -absf(sin(_walk_t)) * 2.2
 		var squash := sin(_walk_t * 2.0)
@@ -135,6 +143,9 @@ func _process(delta: float) -> void:
 			_step_snd_t = 0.36
 			SFX.play("step", -4.0)
 	else:
+		if sprite.sprite_frames != _fr_idle:
+			sprite.sprite_frames = _fr_idle  # стоим — спокойное дыхание
+			sprite.play("default")
 		sprite.speed_scale = 1.0
 		sprite.scale = sprite.scale.lerp(Vector2.ONE, delta * 10.0)
 		sprite.position.y = lerpf(sprite.position.y, 0.0, delta * 10.0)
