@@ -100,13 +100,13 @@ const SLASH_COLORS := ["gold", "amber", "orange", "green", "blue", "violet", "ma
 
 # ---------- УЛУЧШЕНИЯ НА УРОВЕНЬ ----------
 const UPGRADES := [
-	{"id": "dart_rate", "name": "Пылающие руны", "desc": "Скорострельность дротиков +25%", "icon": "assets/bullets/dart/gold/000.png", "max": 6},
-	{"id": "dart_dmg", "name": "Горячие стрелы", "desc": "Урон дротиков +30% (новый цвет пламени!)", "icon": "assets/bullets/dart/amber/000.png", "max": 7},
+	{"id": "dart_rate", "name": "Пылающие руны", "desc": "Темп стрельбы +25%", "icon": "assets/bullets/dart/gold/000.png", "max": 6},
+	{"id": "dart_dmg", "name": "Горячие стрелы", "desc": "Урон дротиков +30%", "icon": "assets/bullets/dart/amber/000.png", "max": 7},
 	{"id": "dart_count", "name": "Веер дротиков", "desc": "+1 дротик за выстрел", "icon": "assets/bullets/dart/blue/000.png", "max": 4},
-	{"id": "slash", "name": "Огненный полумесяц", "desc": "Полумесяц: +40% урона и шире дуга", "icon": "assets/bullets/slash/gold/001.png", "max": 7},
+	{"id": "slash", "name": "Огненный полумесяц", "desc": "Урон +40%, дуга шире", "icon": "assets/bullets/slash/gold/001.png", "max": 7},
 	{"id": "boots", "name": "Сапоги ветра", "desc": "Скорость бега +12%", "icon": "assets/items/flask_blue/000.png", "max": 5},
-	{"id": "heart", "name": "Сердце титана", "desc": "+25 к макс. HP и лечение", "icon": "assets/items/flask_red/000.png", "max": 7},
-	{"id": "magnet", "name": "Магнит душ", "desc": "Радиус сбора монет +45%", "icon": "assets/items/coin/001.png", "max": 5},
+	{"id": "heart", "name": "Сердце титана", "desc": "Макс. HP +25 · лечит", "icon": "assets/items/flask_red/000.png", "max": 7},
+	{"id": "magnet", "name": "Магнит душ", "desc": "Радиус сбора +45%", "icon": "assets/items/coin/001.png", "max": 5},
 	{"id": "regen", "name": "Тихое пламя", "desc": "Регенерация +0.6 HP/сек", "icon": "assets/effects/heal_red/004.png", "max": 5},
 ]
 

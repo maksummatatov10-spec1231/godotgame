@@ -310,15 +310,23 @@ func _card(i: int, u: Dictionary) -> Control:
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(icon)
-	# название: центр, до двух строк, в цвет акцента (обрезается строго по рамке)
-	var t := _mk_label(u["name"], Vector2(3, 52), 8, accent.lightened(0.35), HORIZONTAL_ALIGNMENT_CENTER)
-	t.size = Vector2(w - 6, 26)
+	# название: центр, растянуто якорями по ширине рамки — не вылезет НИКОГДА
+	var t := _mk_label(u["name"], Vector2.ZERO, 8, accent.lightened(0.35), HORIZONTAL_ALIGNMENT_CENTER)
+	t.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	t.offset_left = 2.0
+	t.offset_right = -2.0
+	t.offset_top = 52.0
+	t.offset_bottom = 78.0
 	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	t.clip_text = true
 	root.add_child(t)
-	# описание: полностью видно, мелкий светлый текст (строго по рамке)
-	var d := _mk_label(u["desc"], Vector2(5, 80), 7, Color(0.93, 0.9, 0.97), HORIZONTAL_ALIGNMENT_CENTER)
-	d.size = Vector2(w - 10, 36)
+	# описание: одна короткая строка по центру, тоже на якорях
+	var d := _mk_label(u["desc"], Vector2.ZERO, 7, Color(0.93, 0.9, 0.97), HORIZONTAL_ALIGNMENT_CENTER)
+	d.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	d.offset_left = 4.0
+	d.offset_right = -4.0
+	d.offset_top = 82.0
+	d.offset_bottom = 112.0
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	d.clip_text = true
 	root.add_child(d)
@@ -332,20 +340,22 @@ func _card(i: int, u: Dictionary) -> Control:
 	var hint := _mk_label(str(i + 1), Vector2(w / 2.0 - 12, h - 21), 9, Color(1, 1, 1), HORIZONTAL_ALIGNMENT_CENTER)
 	hint.size = Vector2(24, 12)
 	root.add_child(hint)
-	# интерактив: наведение — рост и блик, клик — выбор
+	# интерактив: наведение — ТОЛЬКО блик рамки и лёгкий прыжок иконки, клик — выбор
+	# (рамки всех карточек всегда строго одного размера!)
 	root.gui_input.connect(func(ev: InputEvent):
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
 			_pick(i)
 	)
+	icon.pivot_offset = Vector2(18, 18)
 	root.mouse_entered.connect(func():
-		var hw := root.create_tween()
-		hw.tween_property(root, "scale", Vector2.ONE * 1.07, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		p.set_hover(1.0)
+		var hw := icon.create_tween()
+		hw.tween_property(icon, "scale", Vector2.ONE * 1.12, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	)
 	root.mouse_exited.connect(func():
-		var hw := root.create_tween()
-		hw.tween_property(root, "scale", Vector2.ONE, 0.15)
 		p.set_hover(0.0)
+		var hw := icon.create_tween()
+		hw.tween_property(icon, "scale", Vector2.ONE, 0.16)
 	)
 	return root
 
@@ -584,7 +594,7 @@ func _build_menu() -> void:
 	menu_hint = _mk_label("ENTER или клик — В БОЙ!", Vector2(0, 240), 10, Color(0.65, 1, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
 	menu_hint.size = Vector2(480, 16)
 	menu_panel.add_child(menu_hint)
-	var ver := _mk_label("v0.11.1", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
+	var ver := _mk_label("v0.11.2", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
 	ver.size = Vector2(472, 12)
 	menu_panel.add_child(ver)
 	# летящие искры-угольки (аддитивные — красиво светятся в темноте)
@@ -620,25 +630,29 @@ func _menu_animate(delta: float) -> void:
 		_menu_intro = maxf(0.0, _menu_intro - delta)
 		return  # идёт каскадное появление — твины сами всё двигают
 	var t := _menu_t
-	# заголовок дышит и переливается золотом
-	menu_title.position.y = 16 + sin(t * 1.3) * 2.0
-	menu_title.label_settings.font_color = Color(1.0, 0.72 + 0.14 * sin(t * 2.1), 0.28 + 0.1 * sin(t * 2.1))
-	# доска покачивается на цепях
-	menu_group.rotation = sin(t * 0.8) * 0.012
+	# заголовок дышит и переливается золотом — плавно и чуть живее
+	menu_title.position.y = 16 + sin(t * 1.7) * 2.2
+	menu_title.label_settings.font_color = Color(1.0, 0.72 + 0.14 * sin(t * 2.7), 0.28 + 0.1 * sin(t * 2.7))
+	# подзаголовок тихо мерцает
+	menu_sub.modulate.a = 0.82 + 0.18 * sin(t * 1.4)
+	# панель качается на цепях: органичный двойной синус, плавный и чуть быстрее
+	menu_group.rotation = sin(t * 1.05) * 0.011 + sin(t * 2.1) * 0.004
+	menu_group.position.y = 56 + sin(t * 1.05) * 1.2
 	# свечения факелов мерцают (в такт мерцающим факелам мира)
 	for i in range(menu_glows.size()):
 		var g: TextureRect = menu_glows[i]
 		g.modulate.a = 0.42 + 0.1 * sin(t * 9.0 + i * 2.6) + 0.05 * sin(t * 23.0 + i)
 	# подсказка дышит
-	menu_hint.modulate.a = 0.55 + 0.45 * sin(t * 3.2)
+	menu_hint.modulate.a = 0.55 + 0.45 * sin(t * 3.8)
 
 func show_menu() -> void:
 	nick_edit.text = GameState.player_name
 	menu_panel.visible = true
 	get_tree().paused = true
 	SFX.play_music("music_menu")
-	# каскадное появление: заголовок падает сверху, доска выезжает, свечения разгораются
-	_menu_intro = 1.1
+	# каскадное появление: заголовок падает сверху, панель выезжает, свечения разгораются
+	# (чуть быстрее прежнего — бодро, но упруго)
+	_menu_intro = 0.8
 	menu_title.position = Vector2(0, -26)
 	menu_title.modulate.a = 0.0
 	menu_sub.modulate.a = 0.0
@@ -649,14 +663,14 @@ func show_menu() -> void:
 		g.modulate.a = 0.0
 	var tw := create_tween()
 	tw.set_parallel(true)
-	tw.tween_property(menu_title, "position", Vector2(0, 16), 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(menu_title, "modulate:a", 1.0, 0.3)
-	tw.tween_property(menu_sub, "modulate:a", 1.0, 0.4).set_delay(0.25)
-	tw.tween_property(menu_group, "position", Vector2(145, 56), 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_delay(0.15)
-	tw.tween_property(menu_group, "modulate:a", 1.0, 0.35).set_delay(0.15)
-	tw.tween_property(menu_hint, "modulate:a", 1.0, 0.4).set_delay(0.6)
+	tw.tween_property(menu_title, "position", Vector2(0, 16), 0.42).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(menu_title, "modulate:a", 1.0, 0.25)
+	tw.tween_property(menu_sub, "modulate:a", 1.0, 0.32).set_delay(0.18)
+	tw.tween_property(menu_group, "position", Vector2(145, 56), 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_delay(0.10)
+	tw.tween_property(menu_group, "modulate:a", 1.0, 0.30).set_delay(0.10)
+	tw.tween_property(menu_hint, "modulate:a", 1.0, 0.34).set_delay(0.45)
 	for i in range(menu_glows.size()):
-		tw.tween_property(menu_glows[i], "modulate:a", 0.5, 0.5).set_delay(0.3 + i * 0.1)
+		tw.tween_property(menu_glows[i], "modulate:a", 0.5, 0.4).set_delay(0.22 + i * 0.08)
 
 func _start_game() -> void:
 	var nick := nick_edit.text.strip_edges()
