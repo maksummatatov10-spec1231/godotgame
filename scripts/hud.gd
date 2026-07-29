@@ -353,7 +353,7 @@ func _card(i: int, u: Dictionary) -> Control:
 	if GameState.player != null and is_instance_valid(GameState.player):
 		lvl = int(GameState.player.upgrade_levels.get(u["id"], 0))
 	var lvl_text := "НОВОЕ!" if lvl == 0 else "УР. %d" % lvl
-	var lvl_color := Color(0.55, 1.0, 0.65) if lvl == 0 else Color.lightened(accent, 0.45)
+	var lvl_color := Color(0.55, 1.0, 0.65) if lvl == 0 else accent.lightened(0.45)
 	var lvl_l := _mk_label(lvl_text, Vector2(w - 58, h - 20), 8, lvl_color, HORIZONTAL_ALIGNMENT_CENTER)
 	lvl_l.size = Vector2(48, 12)
 	root.add_child(lvl_l)
