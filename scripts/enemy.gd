@@ -14,6 +14,7 @@ var xp_value := 1
 var dead := false
 var is_boss := false
 var elite := false
+var mini_boss := false       # чемпион: огромный, злой, с фиолетовой аурой
 
 var sprite: AnimatedSprite2D
 var _attack_cd := 0.0
@@ -227,6 +228,8 @@ func _back_to_move_once() -> void:
 
 ## базовый тон спрайта с учётом роли (возвращаемся к нему после вспышки урона)
 func _base_tint() -> Color:
+	if mini_boss:
+		return Color(1.7, 0.95, 2.0)   # фиолетовая аура чемпиона
 	if golden:
 		return Color(1.9, 1.5, 0.35)
 	if berserk:
@@ -247,6 +250,22 @@ func _base_tint() -> Color:
 func make_thief() -> void:
 	thief = true
 	sprite.modulate = Color(1.3, 1.1, 0.5)
+
+## main делает из врага мини-босса-чемпиона (уже после _ready: чиним масштаб/тон тут)
+func make_mini_boss(hp_mult := 9.0) -> void:
+	mini_boss = true
+	elite = false
+	golden = false
+	berserk = false
+	thief = false
+	hp *= hp_mult
+	max_hp = hp
+	dmg *= 1.6
+	xp_value *= 12
+	radius *= 1.5
+	if sprite:
+		sprite.scale *= 1.3
+		sprite.modulate = _base_tint()
 
 func _process(delta: float) -> void:
 	if dead:
@@ -341,6 +360,9 @@ func _process(delta: float) -> void:
 	elif not _attacking:
 		_hop = {"goblin": 2.2, "skull": 1.1, "dark_rogue": 2.4, "shieldknight": 0.5, "necromancer": 0.7}.get(type_name, 0.8)
 		var speed_val: float = cfg["speed"]
+		if mini_boss:
+			# чемпион шагает тяжело, но на половине HP впадает в ярость
+			speed_val *= 0.85 if hp > max_hp * 0.5 else 1.35
 		var step: Vector2 = dir * speed_val * delta
 		if cfg.get("wobble", false):
 			_wobble_t += delta * 6.0
@@ -521,7 +543,9 @@ func take_damage(p_dmg: float, from_dir := Vector2.ZERO, crit := false) -> void:
 	sprite.modulate = Color(3.0, 3.0, 3.0)
 	FX.damage_number(global_position, int(p_dmg), Color(1.0, 0.9, 0.3), crit)
 	if not is_boss and from_dir != Vector2.ZERO:
-		global_position = GameState.slide_move(global_position, from_dir * 5.0, 6.0)
+		# чемпиона отбрасывает заметно слабее — почти как босса
+		var kb := 1.2 if mini_boss else 5.0
+		global_position = GameState.slide_move(global_position, from_dir * kb, 6.0)
 	# вампир: шанс блинка-исчезновения в клубах дыма
 	if type_name == "vampire" and hp > 0.0 and _blink_cd <= 0.0 and randf() < 0.35:
 		_blink_cd = 3.5
@@ -614,13 +638,20 @@ func _split_blood() -> void:
 		GameState.current_boss = first
 	queue_free()
 
+## узел для дропа: Pickups на сцене Main (родитель врага — Enemies, ему дроп НЕ дети!)
+func _drops_node() -> Node:
+	var main: Node = get_parent().get_parent()
+	if main != null and main.has_node("Pickups"):
+		return main.get_node("Pickups")
+	return get_parent()
+
 func die() -> void:
 	if dead:
 		return
 	dead = true
 	died.emit(self)
-	# некромант сможет воскресить: запоминаем труп (боссов нельзя)
-	if not is_boss:
+	# некромант сможет воскресить: запоминаем труп (боссов и чемпионов нельзя)
+	if not is_boss and not mini_boss:
 		GameState.corpses.append({"pos": global_position, "type": type_name, "t": 14.0})
 	if is_boss:
 		SFX.play("boss_die", -1.0)
@@ -639,14 +670,16 @@ func die() -> void:
 				if global_position.distance_to(o.global_position) < boom_r:
 					o.take_damage(boom_dmg, global_position.direction_to(o.global_position))
 	# вор убит с добычей — возвращает монету с процентами (x2!)
+	# ВАЖНО: дроп идёт в узел Pickups, а не в Enemies — иначе растаскивание
+	# врагов (main._separate_enemies) падает с ошибкой типа и вешает игру!
 	if _carried != null:
 		for i in range(2):
-			get_parent().add_child(Pickup.spawn(
+			_drops_node().add_child(Pickup.spawn(
 				"coin", global_position + Vector2(randf_range(-12, 12), randf_range(-8, 8))))
 		FX.coin_burst(global_position, 0.4)
 	if golden:
 		for i in range(3):
-			get_parent().add_child(Pickup.spawn(
+			_drops_node().add_child(Pickup.spawn(
 				"coin", global_position + Vector2(randf_range(-14, 14), randf_range(-10, 10))))
 		FX.coin_burst(global_position, 0.6)
 	var fx_scale := 0.45

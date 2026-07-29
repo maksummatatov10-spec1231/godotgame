@@ -98,16 +98,17 @@ const PROJECTILES := {
 const DART_COLORS := ["gold", "amber", "orange", "green", "blue", "violet", "magenta", "red"]
 const SLASH_COLORS := ["gold", "amber", "orange", "green", "blue", "violet", "magenta", "red"]
 
-# ---------- УЛУЧШЕНИЯ НА УРОВЕНЬ ----------
+# ---------- УЛУЧШЕНИЯ НА УРОВЕНЬ (усилены в 1.5 раза по просьбе игрока) ----------
 const UPGRADES := [
-	{"id": "dart_rate", "name": "Пылающие руны", "desc": "Темп стрельбы +25%", "icon": "assets/bullets/dart/gold/000.png", "max": 6},
-	{"id": "dart_dmg", "name": "Горячие стрелы", "desc": "Урон дротиков +30%", "icon": "assets/bullets/dart/amber/000.png", "max": 7},
+	{"id": "dart_rate", "name": "Пылающие руны", "desc": "Темп стрельбы +37%", "icon": "assets/bullets/dart/gold/000.png", "max": 6},
+	{"id": "dart_dmg", "name": "Горячие стрелы", "desc": "Урон дротиков +45%", "icon": "assets/bullets/dart/amber/000.png", "max": 7},
 	{"id": "dart_count", "name": "Веер дротиков", "desc": "+1 дротик за выстрел", "icon": "assets/bullets/dart/blue/000.png", "max": 4},
-	{"id": "slash", "name": "Огненный полумесяц", "desc": "Урон +40%, дуга шире", "icon": "assets/bullets/slash/gold/001.png", "max": 7},
-	{"id": "boots", "name": "Сапоги ветра", "desc": "Скорость бега +12%", "icon": "assets/items/flask_blue/000.png", "max": 5},
-	{"id": "heart", "name": "Сердце титана", "desc": "Макс. HP +25 · лечит", "icon": "assets/items/flask_red/000.png", "max": 7},
-	{"id": "magnet", "name": "Магнит душ", "desc": "Радиус сбора +45%", "icon": "assets/items/coin/001.png", "max": 5},
-	{"id": "regen", "name": "Тихое пламя", "desc": "Регенерация +0.6 HP/сек", "icon": "assets/effects/heal_red/004.png", "max": 5},
+	{"id": "slash", "name": "Огненный полумесяц", "desc": "Урон +60%, дуга шире", "icon": "assets/bullets/slash/gold/001.png", "max": 7},
+	{"id": "boots", "name": "Сапоги ветра", "desc": "Скорость бега +18%", "icon": "assets/items/flask_blue/000.png", "max": 5},
+	{"id": "heart", "name": "Сердце титана", "desc": "Макс. HP +38 · лечит", "icon": "assets/items/flask_red/000.png", "max": 7},
+	{"id": "magnet", "name": "Магнит душ", "desc": "Радиус сбора +68%", "icon": "assets/items/coin/001.png", "max": 5},
+	{"id": "regen", "name": "Тихое пламя", "desc": "Регенерация +0.9/сек", "icon": "assets/effects/heal_red/004.png", "max": 5},
+	{"id": "nova", "name": "Огненная нова", "desc": "Кольцо огня по толпе", "icon": "assets/bullets/fire_explosion/red/000.png", "max": 5},
 ]
 
 # ---------- ДИРЕКТОР ВОЛН ----------
@@ -125,5 +126,14 @@ const BOSS_SCHEDULE := [
 	{"time": 120.0, "type": "demon", "hp_mult": 1.0},
 	{"time": 360.0, "type": "blood", "hp_mult": 1.0},
 	{"time": 540.0, "type": "demon", "hp_mult": 2.2},
+]
+# мини-боссы-чемпионы: здоровенные версии обычных врагов с фиолетовой аурой.
+# Выходят между боссами, дропают ларец. (Спрайты полноценных новых боссов
+# ждём: игрок ищет жирный босс-пак — тогда добавим отдельные виды!)
+const MINI_BOSS_SCHEDULE := [
+	{"time": 90.0,  "type": "skeleton2",    "title": "КОСТЯНОЙ ГРОМИЛА",  "hp": 9.0},
+	{"time": 250.0, "type": "necromancer",  "title": "АРХИНЕКРОМАНТ",     "hp": 9.0},
+	{"time": 320.0, "type": "dark_rogue",   "title": "АТАМАН РАЗБОЙНИКОВ", "hp": 9.0},
+	{"time": 460.0, "type": "shieldknight", "title": "СТАЛЬНОЙ КОЛОСС",   "hp": 10.0},
 ]
 const WIN_TIME := 600.0

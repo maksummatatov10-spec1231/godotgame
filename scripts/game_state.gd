@@ -18,8 +18,6 @@ func save_profile() -> void:
 	c.set_value("settings", "opt_manual_aim", opt_manual_aim)
 	c.set_value("settings", "opt_minimap", opt_minimap)
 	c.set_value("settings", "opt_slowmo", opt_slowmo)
-	c.set_value("settings", "sfx", SFX.enabled)
-	c.set_value("settings", "music", SFX.music_enabled)
 	c.save(SAVE_PATH)
 
 ## прочитать ник и настройки (вызывается main при запуске, до постройки HUD)
@@ -31,8 +29,6 @@ func load_profile() -> void:
 	opt_manual_aim = bool(c.get_value("settings", "opt_manual_aim", false))
 	opt_minimap = bool(c.get_value("settings", "opt_minimap", true))
 	opt_slowmo = bool(c.get_value("settings", "opt_slowmo", true))
-	SFX.enabled = bool(c.get_value("settings", "sfx", true))
-	SFX.set_music_enabled(bool(c.get_value("settings", "music", true)))
 
 # ---------- НАСТРОЙКИ (переключаются на паузе, живут между забегами) ----------
 var opt_manual_aim := false  # ручная стрельба мышью (зажми ЛКМ и целься)

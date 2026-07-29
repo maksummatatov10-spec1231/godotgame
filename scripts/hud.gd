@@ -92,6 +92,7 @@ const UPGRADE_ACCENTS := {
 	"heart": Color(1.0, 0.45, 0.55),      # сердце — рубин
 	"magnet": Color(1.0, 0.85, 0.35),     # магнит — золото
 	"regen": Color(0.65, 1.0, 0.50),      # реген — живая зелень
+	"nova": Color(1.0, 0.50, 0.20),       # нова — жаркое пламя
 }
 
 func _ready() -> void:
@@ -386,14 +387,15 @@ func _build_win() -> void:
 	win_panel.add_child(p)
 
 func _build_pause() -> void:
-	# пауза = СВОЯ панель настроек: всё переключается прямо во время игры (клик/1-5)
+	# пауза = СВОЯ панель настроек: всё переключается прямо во время игры (клик/1-3)
+	# (звуковых переключателей больше нет — звук вырезан из игры совсем)
 	pause_panel = Control.new()
 	pause_panel.visible = false
 	add_child(pause_panel)
 	pause_panel.add_child(_dim(Color(0, 0, 0.04, 0.68)))
 	var p := UIPanel.new()
 	p.position = Vector2(143, 50)
-	p.size = Vector2(194, 156)
+	p.size = Vector2(194, 116)
 	p.accent = Color(0.55, 0.8, 1.0)   # ледяная сталь настроек
 	pause_panel.add_child(p)
 	var title := _mk_label("НАСТРОЙКИ", Vector2(143, 58), 12, Color(0.85, 0.95, 1), HORIZONTAL_ALIGNMENT_CENTER)
@@ -403,9 +405,7 @@ func _build_pause() -> void:
 	_mk_setting_row("opt_manual_aim", "Ручная стрельба (ЛКМ)", 80)
 	_mk_setting_row("opt_minimap", "Мини-карта", 100)
 	_mk_setting_row("opt_slowmo", "Слоу-мо боссов", 120)
-	_mk_setting_row("sfx", "Звуковые эффекты", 140)
-	_mk_setting_row("music", "Музыка", 160)
-	var hint := _mk_label("ESC — назад · клик или 1-5 — переключить", Vector2(143, 186), 8, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
+	var hint := _mk_label("ESC — назад · клик или 1-3 — переключить", Vector2(143, 146), 8, Color(0.7, 0.9, 1), HORIZONTAL_ALIGNMENT_CENTER)
 	hint.size = Vector2(194, 12)
 	pause_panel.add_child(hint)
 
@@ -458,8 +458,6 @@ func _setting_on(idx: int) -> bool:
 		"opt_manual_aim": return GameState.opt_manual_aim
 		"opt_minimap": return GameState.opt_minimap
 		"opt_slowmo": return GameState.opt_slowmo
-		"sfx": return SFX.enabled
-		"music": return SFX.music_enabled
 	return false
 
 func _refresh_setting(idx: int) -> void:
@@ -473,13 +471,12 @@ func _refresh_setting(idx: int) -> void:
 
 ## переключить настройку: мгновенно применяется, не снимая паузу
 func _toggle_setting(idx: int) -> void:
+	if idx < 0 or idx >= _settings_rows.size():
+		return  # защита: лишние клавиши/клики не должны ничего ломать
 	match String(_settings_rows[idx]["key"]):
 		"opt_manual_aim": GameState.opt_manual_aim = not GameState.opt_manual_aim
 		"opt_minimap": GameState.opt_minimap = not GameState.opt_minimap
 		"opt_slowmo": GameState.opt_slowmo = not GameState.opt_slowmo
-		"sfx": SFX.enabled = not SFX.enabled
-		"music": SFX.set_music_enabled(not SFX.music_enabled)
-	SFX.play("click", -2.0)
 	_refresh_setting(idx)
 	GameState.save_profile()  # настройки запоминаются между запусками
 
@@ -843,7 +840,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_start_game()
 		elif event.keycode == KEY_ESCAPE:
 			_toggle_pause()
-		elif pause_panel.visible and event.keycode in [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5]:
+		elif pause_panel.visible and event.keycode in [KEY_1, KEY_2, KEY_3]:
 			_toggle_setting(event.keycode - KEY_1)
 		elif levelup_panel.visible and event.keycode in [KEY_1, KEY_2, KEY_3]:
 			_pick(event.keycode - KEY_1)

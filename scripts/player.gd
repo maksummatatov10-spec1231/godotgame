@@ -24,6 +24,11 @@ var slash_radius := 46.0
 var slash_tier := 0
 var magnet_radius := 48.0
 var regen := 0.0
+# огненная нова — кольцо пламени по толпе (покупается на уровне)
+var nova_level := 0
+var nova_cd := 5.6
+var nova_dmg := 26.0
+var nova_radius := 62.0
 
 var upgrade_levels := {}
 var sprite: AnimatedSprite2D
@@ -34,6 +39,7 @@ var nick_label: Label
 var outline_mat: ShaderMaterial
 var _t_dart := 0.4
 var _t_slash := 0.0
+var _t_nova := 0.0
 var _dash_cd := 0.0
 var _iframes := 0.0
 var _regen_acc := 0.0
@@ -223,6 +229,13 @@ func _process(delta: float) -> void:
 			_t_slash = slash_cd
 		else:
 			_t_slash = 0.1
+	# огненная нова: кольцо пламени вокруг героя по всей толпе
+	if nova_level > 0:
+		_t_nova -= delta
+		if _t_nova <= 0.0:
+			_t_nova = nova_cd
+			FX.cast(global_position)
+			Nova.burst(get_parent(), global_position, nova_radius, nova_dmg, mini(nova_level - 1, 7))
 
 func _nearest_enemy(max_dist: float) -> Node2D:
 	var best: Node2D = null
@@ -302,8 +315,8 @@ func add_xp(amount: int) -> void:
 	while xp >= xp_next:
 		xp -= xp_next
 		level += 1
-		# прокачка замедлена в ~2.86 раза (x1/0.7 * 2) по просьбе
-		xp_next = int(ceil(4.0 * pow(level, 1.35) / 0.7 * 2.0))
+		# прокачка замедлена в ~2.86 раза, потом ускорена на 0.3 (x1/1.3) по просьбе
+		xp_next = int(ceil(4.0 * pow(level, 1.35) / 0.7 * 2.0 / 1.3))
 		_update_outline()
 		FX.level_up(global_position + Vector2(0, -18))
 		FX.sparkle(global_position, 0.5)
@@ -313,21 +326,28 @@ func add_xp(amount: int) -> void:
 func apply_upgrade(id: String) -> void:
 	upgrade_levels[id] = upgrade_levels.get(id, 0) + 1
 	match id:
-		"dart_rate": dart_cd = maxf(0.18, dart_cd * 0.80)
+		"dart_rate": dart_cd = maxf(0.18, dart_cd * 0.73)  # темп x1.37 (было x1.25) — буст в 1.5 раза
 		"dart_dmg":
-			dart_dmg *= 1.30
+			dart_dmg *= 1.45
 			dart_tier = mini(dart_tier + 1, 7)
 		"dart_count": dart_count = mini(dart_count + 1, 5)
+		# огненная нова — НОВАЯ магия: кольцо пламени вокруг героя
+		"nova":
+			nova_level += 1
+			nova_dmg += 18.0
+			nova_radius += 13.0
+			nova_cd = maxf(3.2, nova_cd - 0.6)
+			_t_nova = 0.8  # первая волна почти сразу — чтобы почувствовать силу!
 		"slash":
-			slash_dmg *= 1.40
-			slash_radius += 7.0
+			slash_dmg *= 1.60
+			slash_radius += 10.0
 			slash_tier = mini(slash_tier + 1, 7)
-		"boots": speed *= 1.12
+		"boots": speed *= 1.18
 		"heart":
-			max_hp += 25.0
-			heal(25.0)
-		"magnet": magnet_radius *= 1.45
-		"regen": regen += 0.6
+			max_hp += 38.0
+			heal(38.0)
+		"magnet": magnet_radius *= 1.68
+		"regen": regen += 0.9
 
 func _die() -> void:
 	_dead = true

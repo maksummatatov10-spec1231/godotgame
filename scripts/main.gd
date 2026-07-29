@@ -78,6 +78,7 @@ var _chest_t := 45.0      # периодический сундук
 var _loot_t := 18.0       # периодические монеты/флаконы на карте
 var _loot_cycle := 0
 var _boss_idx := 0
+var _mini_idx := 0      # следующий мини-босс по расписанию
 var _spawn_points: Array = []
 var _pickup_points: Array = []
 var _flickers: Array = []  # PointLight2D'ы с мерцанием (факелы/свечи)
@@ -367,6 +368,12 @@ func _wave_director(delta: float) -> void:
 		if GameState.run_time >= bs["time"]:
 			_boss_idx += 1
 			_spawn_boss(bs["type"], bs["hp_mult"])
+	# мини-боссы-чемпионы выходят между боссами — держат толпу в тонусе
+	if _mini_idx < Data.MINI_BOSS_SCHEDULE.size():
+		var mb: Dictionary = Data.MINI_BOSS_SCHEDULE[_mini_idx]
+		if GameState.run_time >= mb["time"]:
+			_mini_idx += 1
+			_spawn_mini_boss(mb)
 
 func _pick_type(t: float) -> String:
 	var table: Array = Data.WAVE_TABLE[0][1]
@@ -443,6 +450,14 @@ func _skeleton_march() -> void:
 	SFX.play("scream", -2.0, 0.8)
 	hud.flash("МАРШ СКЕЛЕТОВ!", 1.8)
 
+## мини-босс: здоровенный чемпион из обычного врага (фиолетовая аура, дроп-ларец)
+func _spawn_mini_boss(mb: Dictionary) -> void:
+	var e := _spawn_enemy(String(mb["type"]), _spawn_pos(true), false)
+	e.make_mini_boss(float(mb["hp"]))
+	FX.smoke_skull(e.global_position, 1.35)
+	FX.explosion(e.global_position, 1.1, false)
+	hud.flash("МИНИ-БОСС: %s!" % String(mb["title"]), 2.2)
+
 func _spawn_boss(type: String, hp_mult: float) -> void:
 	var b := Enemy.create_boss(type, hp_mult)
 	b.global_position = _spawn_pos(true)
@@ -512,7 +527,13 @@ func _on_enemy_died(e: Enemy) -> void:
 	# дроп: монеты, флаконы, ключи — падают из врагов
 	var cc: float = e.cfg.get("coin_chance", 0.45)
 	var r := randf()
-	if e.elite:
+	if e.mini_boss:
+		# чемпион делится богатством: ларец, пара монет и лечилка
+		_spawn_pickup("mini_chest", e.global_position)
+		_spawn_pickup("coin", e.global_position + Vector2(12, 5))
+		_spawn_pickup("coin", e.global_position - Vector2(12, 5))
+		_spawn_pickup("heal", e.global_position + Vector2(0, 11))
+	elif e.elite:
 		_spawn_pickup("chest", e.global_position)
 		_spawn_pickup("coin", e.global_position + Vector2(10, 4))
 		_spawn_pickup("coin", e.global_position - Vector2(10, 4))
@@ -531,12 +552,13 @@ func _separate_enemies() -> void:
 	var arr := enemies_node.get_children()
 	var n := arr.size()
 	for i in range(n):
-		var a: Enemy = arr[i]
-		if a.dead or a.is_boss or a.orbit_t > 0.0:
-			continue  # кружащихся по орбите не растаскиваем — им радиус дороже
+		var a := arr[i] as Enemy
+		# защита от случайных "не-врагов" в узле + кружащихся по орбите не растаскиваем
+		if a == null or a.dead or a.is_boss or a.mini_boss or a.orbit_t > 0.0:
+			continue
 		for j in range(i + 1, n):
-			var b: Enemy = arr[j]
-			if b.dead or b.is_boss or b.orbit_t > 0.0:
+			var b := arr[j] as Enemy
+			if b == null or b.dead or b.is_boss or b.mini_boss or b.orbit_t > 0.0:
 				continue
 			var d := a.global_position - b.global_position
 			var dist := d.length()
