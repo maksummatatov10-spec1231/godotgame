@@ -639,7 +639,7 @@ func _build_menu() -> void:
 	menu_hint = _mk_label("ENTER или клик — В БОЙ!", Vector2(0, 240), 10, Color(0.65, 1, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
 	menu_hint.size = Vector2(480, 16)
 	menu_panel.add_child(menu_hint)
-	var ver := _mk_label("v0.15.1", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
+	var ver := _mk_label("v0.15.2", Vector2(0, 256), 8, Color(0.6, 0.6, 0.7, 0.7), HORIZONTAL_ALIGNMENT_RIGHT)
 	ver.size = Vector2(472, 12)
 	menu_panel.add_child(ver)
 	# летящие искры-угольки (аддитивные — красиво светятся в темноте)

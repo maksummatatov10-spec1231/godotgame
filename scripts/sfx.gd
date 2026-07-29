@@ -59,8 +59,10 @@ static func attach(root: Node) -> void:
 	_music.process_mode = Node.PROCESS_MODE_ALWAYS
 	root.add_child(_music)
 
-## найти/собрать поток по имени. WAV/OGG/MP3 читаем БАЙТАМИ без импорта —
-## ни одной ошибки движка: чужой/битый файл просто отдаёт null (игра молчит)
+## найти/собрать поток по имени. Формат определяем по СОДЕРЖИМОМУ байтов,
+## а НЕ по расширению: переименованные .mp3/.wav/.ogg играют как ни в чём не бывало.
+## MP4/AAC и прочие чужие форматы — молча null (в движке нет AAC-декодера, такие
+## файлы надо КОНВЕРТИРОВАТЬ в wav/ogg/mp3 — переименование не считается :)
 static func _find(sname: String) -> AudioStream:
 	if _variants_cache.has(sname):
 		var got: AudioStream = _variants_cache[sname]
@@ -75,26 +77,36 @@ static func _find(sname: String) -> AudioStream:
 		var path := SFX_DIR + sname + ext
 		if not FileAccess.file_exists(path):
 			continue
-		match ext:
-			".wav":
-				stream = _load_wav(path)
-			".ogg":
-				stream = _load_ogg(path)
-			".mp3":
-				stream = _load_mp3(path)
+		stream = _load_any(path)
 		if stream != null:
 			break
 	_variants_cache[sname] = stream
 	return stream
 
+## медиа-детектив: смотрим первые байты и грузим по РЕАЛЬНОМУ формату
+static func _load_any(path: String) -> AudioStream:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.size() < 8:
+		return null
+	if bytes[0] == 0x52 and bytes[1] == 0x49 and bytes[2] == 0x46 and bytes[3] == 0x46:
+		return _parse_wav_bytes(bytes)                                     # "RIFF" = WAV
+	if bytes[0] == 0x4F and bytes[1] == 0x67 and bytes[2] == 0x67 and bytes[3] == 0x53:
+		return AudioStreamOggVorbis.load_from_buffer(bytes)                # "OggS" = OGG
+	var is_id3 := bytes[0] == 0x49 and bytes[1] == 0x44 and bytes[2] == 0x33     # "ID3"
+	var is_sync := bytes[0] == 0xFF and (bytes[1] & 0xE0) == 0xE0                # mp3-кадр
+	if is_id3 or is_sync:
+		var m := AudioStreamMP3.new()
+		m.data = bytes
+		if m.get_length() > 0.01:
+			return m                                                       # MP3
+	# "...ftyp" = MP4-контейнер (AAC внутри — движок его не играет), всё прочее — unknown
+	return null
+
 ## WAV собираем вручную по байтам RIFF: читаем fmt/data-чанки сами,
 ## полностью независимо от импортёра движка. Только PCM 8/16 бит (наши такие).
-static func _load_wav(path: String) -> AudioStreamWAV:
-	var bytes := FileAccess.get_file_as_bytes(path)
+static func _parse_wav_bytes(bytes: PackedByteArray) -> AudioStreamWAV:
 	if bytes.size() < 44:
 		return null
-	if bytes[0] != 0x52 or bytes[1] != 0x49 or bytes[2] != 0x46 or bytes[3] != 0x46:
-		return null   # нет "RIFF"
 	if bytes[8] != 0x57 or bytes[9] != 0x41 or bytes[10] != 0x56 or bytes[11] != 0x45:
 		return null   # нет "WAVE"
 	var pos := 12
@@ -130,29 +142,6 @@ static func _load_wav(path: String) -> AudioStreamWAV:
 	if w.get_length() <= 0.0:
 		return null
 	return w
-
-## MP3: проверяем магию (ID3-тег или старт кадра), потом отдаём байты декодеру.
-## Если сайт выдал НЕ mp3 под именем .mp3 — молча вернём null, а не ошибку.
-static func _load_mp3(path: String) -> AudioStreamMP3:
-	var bytes := FileAccess.get_file_as_bytes(path)
-	if bytes.size() < 8:
-		return null
-	var is_id3 := bytes[0] == 0x49 and bytes[1] == 0x44 and bytes[2] == 0x33  # "ID3"
-	var is_sync := bytes[0] == 0xFF and (bytes[1] & 0xE0) == 0xE0             # mp3-кадр
-	if not is_id3 and not is_sync:
-		return null
-	var m := AudioStreamMP3.new()
-	m.data = bytes
-	if m.get_length() <= 0.01:
-		return null
-	return m
-
-## OGG: читаем байты сами (магия "OggS"), декодируем из буфера — без импорта.
-static func _load_ogg(path: String) -> AudioStreamOggVorbis:
-	var bytes := FileAccess.get_file_as_bytes(path)
-	if bytes.size() < 4 or bytes[0] != 0x4F or bytes[1] != 0x67 or bytes[2] != 0x67 or bytes[3] != 0x53:
-		return null   # нет "OggS"
-	return AudioStreamOggVorbis.load_from_buffer(bytes)
 
 static func _db(vol01: float) -> float:
 	if vol01 <= 0.001:
