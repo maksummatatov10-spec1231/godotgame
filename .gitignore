@@ -1,0 +1,18 @@
+# Godot 4 генерируемые файлы
+.godot/
+imported/
+*.translation
+
+# Экспорт-сборки
+builds/
+*.pck
+*.exe
+*.apk
+
+# ОС
+.DS_Store
+Thumbs.db
+
+# Релизные архивы: тяжёлые, в git больше не храним.
+# Скачивание — через авто-архив тега на GitHub (Releases).
+dist/
