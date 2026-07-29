@@ -73,6 +73,7 @@ var _menu_t := 0.0
 var _menu_intro := 0.0      # идёт анимация появления меню
 # настройки/миникарта/эффекты
 var minimap: Control
+var _mm_t := 0.0   # троттлинг перерисовки мини-карты (плавность не страдает: 8 Гц глазу хватит)
 var boss_arrow: TextureRect # стрелка на краю экрана к боссу за кадром
 var combo_label: Label
 var white_flash: ColorRect  # белая вспышка (смерть босса)
@@ -93,6 +94,9 @@ const UPGRADE_ACCENTS := {
 	"magnet": Color(1.0, 0.85, 0.35),     # магнит — золото
 	"regen": Color(0.65, 1.0, 0.50),      # реген — живая зелень
 	"nova": Color(1.0, 0.50, 0.20),       # нова — жаркое пламя
+	"crit": Color(1.0, 0.40, 0.75),       # крит — розовая искра
+	"blade_rate": Color(0.50, 0.75, 1.0), # вихрь — холодная сталь
+	"armor": Color(0.65, 0.80, 0.70),     # броня — камень с мхом
 }
 
 func _ready() -> void:
@@ -248,10 +252,13 @@ func _mm_draw() -> void:
 			dot.call(pk.global_position, Color(1.0, 0.8, 0.2), 2.0)
 		else:
 			dot.call(pk.global_position, Color(0.4, 0.8, 1.0, 0.85), 1.0)
-	# врагада — красные точки
+	# враги — красные точки; МИНИ-БОССЫ — крупные фиолетовые (теперь их видно!)
 	for e in GameState.enemies:
 		if is_instance_valid(e) and not e.dead and not e.is_boss:
-			dot.call(e.global_position, Color(1.0, 0.3, 0.3), 1.4)
+			if e.mini_boss:
+				dot.call(e.global_position, Color(0.85, 0.35, 1.0), 2.6)
+			else:
+				dot.call(e.global_position, Color(1.0, 0.3, 0.3), 1.4)
 	# босс — крупная фиолетовая точка
 	if GameState.current_boss and is_instance_valid(GameState.current_boss):
 		dot.call(GameState.current_boss.global_position, Color(1.0, 0.2, 0.85), 3.0)
@@ -714,7 +721,10 @@ func _process(delta: float) -> void:
 	var want_mm := GameState.opt_minimap and not menu_panel.visible and not gameover_panel.visible
 	if minimap.visible != want_mm:
 		minimap.visible = want_mm
-	if minimap.visible:
+	# ОПТИМИЗИРОВАНО (v0.13): перерисовка 8 раз в секунду вместо каждого кадра
+	_mm_t += delta
+	if minimap.visible and _mm_t >= 0.12:
+		_mm_t = 0.0
 		minimap.queue_redraw()
 	# стрелка к боссу, когда он за экраном
 	var bb = GameState.current_boss

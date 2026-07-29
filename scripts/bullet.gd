@@ -75,6 +75,8 @@ static func hostile_shot(projectile_id: String, pos: Vector2, d: Vector2, p_dmg:
 	var dir_str: String = cfg.get("dir", "")
 	if "comet" in dir_str:
 		b.add_child(_mk_light(Color(1.0, 0.35, 0.2), 0.55, 0.6))
+	elif "rocket" in dir_str:
+		b.add_child(_mk_light(Color(1.0, 0.5, 0.15), 0.5, 0.5))  # ракета батареи жарко светится
 	elif "orb" in dir_str:
 		b.add_child(_mk_light(Color(0.7, 0.4, 1.0), 0.35, 0.4))
 	return b
@@ -127,15 +129,22 @@ func _check_player() -> void:
 		_fizzle(true)
 
 func _check_enemies() -> void:
-	# копия списка: босс может разделиться прямо от нашего попадания
-	for e in GameState.enemies.duplicate():
+	# ОПТИМИЗИРОВАНО (v0.13): читаем список БЕЗ копии-каждый-кадр (деление твари
+	# безопасно: мы только читаем до первого попадания, потом сразу return),
+	# квадрат расстояния вместо корня — быстрее при толпе.
+	var crit_bonus := 0.0
+	var pl := GameState.player
+	if pl != null and is_instance_valid(pl):
+		crit_bonus = pl.crit_bonus
+	for e in GameState.enemies:
 		if not is_instance_valid(e) or e.dead or _hit_ids.has(e.get_instance_id()):
 			continue
-		if global_position.distance_to(e.global_position) < radius + e.radius:
+		var rr := radius + e.radius
+		if global_position.distance_squared_to(e.global_position) < rr * rr:
 			_hit_ids.append(e.get_instance_id())
 			GameState.shots_hit += 1
 			var final_dmg := dmg
-			var crit := randf() < 0.10  # крит: 10% шанс, двойной урон, крупная цифра
+			var crit := randf() < 0.10 + crit_bonus  # крит: базово 10% + карточки «Взгляд ястреба»
 			if crit:
 				final_dmg *= 2.0
 				SFX.play("crit", -4.0)

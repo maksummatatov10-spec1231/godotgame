@@ -29,6 +29,9 @@ var nova_level := 0
 var nova_cd := 5.6
 var nova_dmg := 26.0
 var nova_radius := 62.0
+# новые карточки v0.13: крит и броня
+var crit_bonus := 0.0    # +шанс крита дротиков (поверх базовых 10%)
+var armor := 0.0         # доля входящего урона, что глушится (макс ~48%)
 
 var upgrade_levels := {}
 var sprite: AnimatedSprite2D
@@ -282,7 +285,7 @@ func add_sibling_bullet(d: Vector2) -> void:
 func take_damage(dmg: float) -> void:
 	if _dead or _iframes > 0.0 or GameState.game_over:
 		return
-	hp -= dmg
+	hp -= dmg * (1.0 - armor)   # каменная кожа глушит часть удара
 	_iframes = 0.55
 	GameState.combo = 0      # серия сгорела — ранение сбрасывает комбо
 	GameState.combo_t = 0.0
@@ -348,6 +351,9 @@ func apply_upgrade(id: String) -> void:
 			heal(38.0)
 		"magnet": magnet_radius *= 1.68
 		"regen": regen += 0.9
+		"crit": crit_bonus += 0.08
+		"blade_rate": slash_cd = maxf(0.9, slash_cd * 0.82)
+		"armor": armor = minf(armor + 0.12, 0.48)
 
 func _die() -> void:
 	_dead = true

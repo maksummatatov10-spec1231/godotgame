@@ -451,11 +451,13 @@ func _skeleton_march() -> void:
 	hud.flash("МАРШ СКЕЛЕТОВ!", 1.8)
 
 ## мини-босс: здоровенный чемпион из обычного врага (фиолетовая аура, дроп-ларец)
+## ВАЖНО: спавним РЯДОМ с героем (за краем экрана) — иначе медленный чемпион
+## шёл через всю карту и так и не доходил (баг «чемпион не появляется»)!
 func _spawn_mini_boss(mb: Dictionary) -> void:
-	var e := _spawn_enemy(String(mb["type"]), _spawn_pos(true), false)
+	var e := _spawn_enemy(String(mb["type"]), _ring_pos(randf_range(185.0, 235.0)), false)
 	e.make_mini_boss(float(mb["hp"]))
 	FX.smoke_skull(e.global_position, 1.35)
-	FX.explosion(e.global_position, 1.1, false)
+	FX.explosion(e.global_position, 1.1, true)  # фиолетовый взрыв = фирменный знак чемпиона
 	hud.flash("МИНИ-БОСС: %s!" % String(mb["title"]), 2.2)
 
 func _spawn_boss(type: String, hp_mult: float) -> void:
@@ -548,23 +550,38 @@ func _on_enemy_died(e: Enemy) -> void:
 	elif r < cc + 0.24:
 		_spawn_pickup("key_silver", e.global_position)
 
+# растаскивание толпы: ОПТИМИЗИРОВАНО (v0.13) —
+# 1) обрабатываем половину пар за кадр (чередуем чётность: 30 Гц хватает),
+# 2) квадраты расстояний вместо sqrt (корень — только у реально близких),
+# 3) пары, где ОБА врага далеко от героя/экрана, пропускаем (их всё равно не видно),
+# 4) get_child(i) вместо get_children() — без лишнего массива каждый кадр.
+var _sep_phase := 0
+
 func _separate_enemies() -> void:
-	var arr := enemies_node.get_children()
-	var n := arr.size()
+	_sep_phase = 1 - _sep_phase
+	var n := enemies_node.get_child_count()
+	var pl := GameState.player
+	var pc := pl.global_position if pl != null and is_instance_valid(pl) else Vector2.ZERO
+	const FAR2 := 420.0 * 420.0
 	for i in range(n):
-		var a := arr[i] as Enemy
+		var a := enemies_node.get_child(i) as Enemy
 		# защита от случайных "не-врагов" в узле + кружащихся по орбите не растаскиваем
 		if a == null or a.dead or a.is_boss or a.mini_boss or a.orbit_t > 0.0:
 			continue
+		var a_far := a.global_position.distance_squared_to(pc) > FAR2
 		for j in range(i + 1, n):
-			var b := arr[j] as Enemy
+			if ((i + j) & 1) != _sep_phase:
+				continue
+			var b := enemies_node.get_child(j) as Enemy
 			if b == null or b.dead or b.is_boss or b.mini_boss or b.orbit_t > 0.0:
 				continue
+			if a_far and b.global_position.distance_squared_to(pc) > FAR2:
+				continue
 			var d := a.global_position - b.global_position
-			var dist := d.length()
 			var min_d := (a.radius + b.radius) * 0.85
-			if dist < min_d and dist > 0.01:
-				var push := d.normalized() * (min_d - dist) * 0.4
+			var dist2 := d.length_squared()
+			if dist2 < min_d * min_d and dist2 > 0.0001:
+				var push := d.normalized() * (min_d - sqrt(dist2)) * 0.4
 				a.global_position = GameState.slide_move(a.global_position, push, 6.0)
 				b.global_position = GameState.slide_move(b.global_position, -push, 6.0)
 

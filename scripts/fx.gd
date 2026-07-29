@@ -7,6 +7,10 @@ static var effects_root: Node2D = null
 static func spawn(dir_path: String, pos: Vector2, fps: float = 15.0, scale: float = 1.0, z: int = 60) -> AnimatedSprite2D:
 	if effects_root == null:
 		return null
+	# ОПТИМИЗИРОВАНО (v0.13): бюджет эффектов! Когда на экране мясорубка,
+	# декоративные вспышки сверх лимита просто пропускаем — FPS важнее искр.
+	if effects_root.get_child_count() > 140:
+		return null
 	var s := AnimLib.sprite(dir_path, fps, false)
 	s.global_position = pos
 	s.scale = Vector2.ONE * scale

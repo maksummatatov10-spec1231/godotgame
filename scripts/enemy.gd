@@ -119,11 +119,16 @@ func _apply_spawn_intro() -> void:
 			# демон вспарывает землю огнём
 			FX.explosion(global_position, 1.4)
 			FX.spawn("assets/bullets/cast", global_position + Vector2(0, 4), 12.0, 1.3, 12)
-		else:
+		elif type_name == "blood":
 			# кровавая тварь собирается из лужи крови
 			FX.splatter(global_position, false, 1.6)
 			FX.explosion(global_position, 1.3, true)
 			FX.smoke_skull(global_position, 0.9)
+		else:
+			# новые боссы: фиолетовый разлом + дымный череп из пустоты
+			FX.explosion(global_position, 1.5, true)
+			FX.smoke_skull(global_position, 1.1)
+			FX.spawn("assets/bullets/cast", global_position, 14.0, 1.1, 12)
 		sprite.scale = Vector2.ONE * cfg["scale"] * 0.35
 		sprite.modulate.a = 0.0
 		return
@@ -363,6 +368,8 @@ func _process(delta: float) -> void:
 		if mini_boss:
 			# чемпион шагает тяжело, но на половине HP впадает в ярость
 			speed_val *= 0.85 if hp > max_hp * 0.5 else 1.35
+		elif _phase2:
+			speed_val *= 1.3   # яростные боссы во второй фазе быстрее
 		var step: Vector2 = dir * speed_val * delta
 		if cfg.get("wobble", false):
 			_wobble_t += delta * 6.0
@@ -570,8 +577,15 @@ func take_damage(p_dmg: float, from_dir := Vector2.ZERO, crit := false) -> void:
 		elif type_name == "blood":
 			_split_blood()
 			return
-	# босс второй фазы огрызается при уроне сплэшем (hurt-кадры!)
-	if is_boss and (_phase2 or _split_child) and hp > 0.0:
+		elif type_name == "goblin_captain":
+			# капитан ярится: краснеет, быстреет и бьёт больнее (без смены кадров)
+			_phase2 = true
+			dmg *= 1.3
+			FX.explosion(global_position, 1.3, false)
+			FX.smoke_skull(global_position, 1.0)
+			sprite.modulate = Color(1.8, 0.7, 0.55)
+	# боссы огрызаются при уроне сплэшем (hurt-кадры — у всех они полные!)
+	if is_boss and hp > 0.0:
 		_splash_acc += p_dmg
 		if _splash_acc >= 60.0:
 			_splash_acc = 0.0
